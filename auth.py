@@ -1,5 +1,5 @@
-from db_function import is_email_in_db, is_phone_number_in_db, validate_password, bcrypt, create_user
-from main import is_valid_email, is_date_of_birth_valid, is_valid_phone_number
+from db import is_email_in_db, is_phone_number_in_db, validate_password, bcrypt, create_user
+from fn import is_valid_email, is_date_of_birth_valid, is_valid_phone_number
 
 def authenticate_user(identifier, identifier_type, password):
     if identifier_type == 'email':
