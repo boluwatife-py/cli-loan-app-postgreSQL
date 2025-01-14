@@ -76,4 +76,5 @@ def is_valid_phone_number(phone_number_input):
     else:
         return {'success': False, 'message': 'Invalid phone number'}
                 
-            
+if __name__ == "__main__":
+    pass

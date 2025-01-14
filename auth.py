@@ -65,3 +65,7 @@ def signup(**kwargs):
     user = create_user(name=name, email=email, password=password, dob=dob, phone_number=phone_number)
     if user['success'] == True:
         print('Account created successfully')
+        
+        
+if __name__ == "__main__":
+    pass

@@ -1,5 +1,4 @@
 import psycopg2
-# from hashlib import bcrypt
 import bcrypt
 
 conn = psycopg2.connect(database = "LAir", 
@@ -180,10 +179,11 @@ def validate_password(user_id, password):
             return {'success': False, 'user':None, 'message':'User not found.'}
     except psycopg2.Error as e:
         print(f"Database error: {e}")
-        return False
+        return {'success': False, 'user':None, 'message':'Database error.'}
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-        return False
+        return {'success': False, 'user':None, 'message':'Unknon Error.'}
+    
     
 def create_user(name, email, phone_number, password, dob):
     insert_query = """
@@ -196,3 +196,6 @@ def create_user(name, email, phone_number, password, dob):
     conn.commit()
     
     return {'success': True, 'user': user_id, 'message': 'Account created successfully'}
+
+if __name__ == "__main__":
+    pass
