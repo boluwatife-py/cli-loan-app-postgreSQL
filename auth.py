@@ -10,7 +10,7 @@ def authenticate_user(identifier, identifier_type, password):
         return {'success': False, 'user': None, 'message': 'Request unsuccessful, error from our end'}
 
     if user['success']:
-        next = validate_password(password=password, user_id=user)
+        next = validate_password(password=password, user_id=user['user'])
         if next['success'] == True:
             return {'success': True, 'user': user, 'message': 'Login successful'}
         else:
@@ -43,7 +43,7 @@ def signup(**kwargs):
     
     # SECOND VERIFICATION FOR THE DATE OF BIRTH
     _dob = is_date_of_birth_valid(dob)
-    if _dob['success' == False]:
+    if _dob['success'] == False:
         return {f'success': False, 'message': {_dob["message"]}}
     
     
@@ -63,11 +63,10 @@ def signup(**kwargs):
         return {'success': False, 'message': 'Invalid pin'}
     
 
-    password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     
     user = create_user(name=name, email=email, password=password, dob=dob, phone_number=phone_number)
-    if user['success'] == True:
-        print('Account created successfully')
+    return user
         
         
 if __name__ == "__main__":

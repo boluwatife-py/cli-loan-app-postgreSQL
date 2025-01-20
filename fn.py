@@ -2,6 +2,9 @@ from datetime import datetime
 from dateutil import parser
 from datetime import date
 import re
+from progress.bar import Bar
+import time
+from colorama import Fore, Style
 
 
 # REGULAR EXPRESSION TO VERIFY EMAIL
@@ -29,14 +32,13 @@ def is_date_of_birth_valid(dob_input):
         # Calculate age
         age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
         
-        if age >= 18:
-            return {'success': True, 'message': 'Age successfully verified'}
+        if age >= 18 and age <= 90:
+            return {'success': True, 'message': 'Age successfully verified'} 
         else:
-            return {'success': False, 'message': 'User is less than 18 years old'}
+            return {'success': False, 'message': 'User is less than 18 or greater than 90 years old', 'type': 0}
     
     except (ValueError, TypeError):
-        # Catch errors if the date is invalid or cannot be parsed
-        return {'success': False, 'message': f'{dob_input} is an invalid date format/input'}
+        return {'success': False, 'message': f'{dob_input} is an invalid date format/input', 'type': 1}
     
     
 def is_valid_phone_number(phone_number_input):
@@ -45,33 +47,59 @@ def is_valid_phone_number(phone_number_input):
     
     THIS FUNCTION VERIFIES IT FOR NIGERIAN PHONE NUMBER.
     """
-    
-    #CHECKS THE LENGTH OF THE PHONE NUMBER
-    if len(phone_number_input) != 14 or len(phone_number_input) != 11:
-        return False
         
     #NESTED IF CHECK IF NUMBER IS IN THIS FORMAT "080********"
-    if phone_number_input.startsWith('0'):
-        if phone_number_input[1] in ['8', '7', '9']:
-            if phone_number_input[2] in ['0', '1']:
-                return True
+    if phone_number_input.startswith('0'):
+        if len(phone_number_input) == 11:
+            if phone_number_input[1] in ['8', '7', '9']:
+                if phone_number_input[2] in ['0', '1']:
+                    return True
+                else:
+                    return False
             else:
-                False
+                return False
         else:
-            False
+            return False
         
     #CHECKS IF NUMBER IS IN THIS FORMAT "+23480********"
     elif phone_number_input.startswith('+234'):
-        if phone_number_input[4] in ['8', '7', '9']:
-            if phone_number_input[5] in ['0', '1']:
-                return True
+        if len(phone_number_input) == 14:
+            if phone_number_input[4] in ['8', '7', '9']:
+                if phone_number_input[5] in ['0', '1']:
+                    return True
+                else:
+                    return False
             else:
-                False
+                return False
         else:
-            False
-        
+            return False
     else:
         False
                 
-if __name__ == "__main__":
-    pass
+  
+def is_valid_fullname(fullname):
+    pattern = r"^[a-zA-Z-' ]{2,}$"
+    return bool(re.match(pattern, fullname))
+
+
+# Success Progress Bar (Green)
+class SuccessBar(Bar):
+    message = Fore.GREEN + "Success" + Style.RESET_ALL
+    fill = Fore.GREEN + "█" + Style.RESET_ALL
+    suffix = ''
+
+# Error Progress Bar (Red)
+class ErrorBar(Bar):
+    message = Fore.RED + "Error" + Style.RESET_ALL
+    fill = Fore.RED + "█" + Style.RESET_ALL
+    suffix = ''
+
+
+def show_progress(bar_class, duration=3):
+    """Show a progress bar using the given bar class, completing in 3 seconds."""
+    steps = 100
+    interval = duration / steps
+    with bar_class(max=steps) as bar:
+        for _ in range(steps):
+            time.sleep(interval)
+            bar.next()

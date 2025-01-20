@@ -166,11 +166,11 @@ def user(id):
 
 def validate_password(user_id, password):
     try:
-        cur.execute("SELECT password FROM Users WHERE user_id = %s", (user_id,))
-        result = cur.fetchone()
-
+        cur.execute(f"SELECT password FROM Users WHERE user_id='{user_id}'")
+        result = cur.fetchone()[0]
+        
         if result:
-            stored_password_hash = result[0]
+            stored_password_hash = result
             if bcrypt.checkpw(password.encode('utf-8'), stored_password_hash.encode('utf-8')):
                 return {'success':True, 'user':user_id, 'message':'Password veriied successfully'}
             else:
@@ -187,7 +187,7 @@ def validate_password(user_id, password):
     
 def create_user(name, email, phone_number, password, dob):
     insert_query = """
-        INSERT INTO Users (name, email, password, age, phone_number)
+        INSERT INTO Users (name, email, password, dob, phone_number)
         VALUES (%s, %s, %s, %s, %s) RETURNING user_id;
     """
     
