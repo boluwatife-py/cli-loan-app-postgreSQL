@@ -59,6 +59,9 @@ def signup(**kwargs):
     if not len(password) == 4:
         return {'success': False, 'message': 'pin must be 4 digits'}
     
+    if not password.isdigit():
+        return {'success': False, 'message': 'Invalid pin'}
+    
 
     password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
     

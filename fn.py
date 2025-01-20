@@ -10,9 +10,6 @@ def is_valid_email(email):
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
 
-from datetime import datetime
-from dateutil import parser
-from datetime import date
 
 def is_date_of_birth_valid(dob_input):
     """
@@ -51,30 +48,30 @@ def is_valid_phone_number(phone_number_input):
     
     #CHECKS THE LENGTH OF THE PHONE NUMBER
     if len(phone_number_input) != 14 or len(phone_number_input) != 11:
-        return {'success': False, 'message': 'Invalid phone number'}
+        return False
         
     #NESTED IF CHECK IF NUMBER IS IN THIS FORMAT "080********"
     if phone_number_input.startsWith('0'):
         if phone_number_input[1] in ['8', '7', '9']:
             if phone_number_input[2] in ['0', '1']:
-                return {'success': True, 'message': 'Phone number was successfully verified'}
+                return True
             else:
-                return {'success': False, 'message': 'Invalid phone number'}
+                False
         else:
-            return {'success': False, 'message': 'Invalid phone number'}
+            False
         
     #CHECKS IF NUMBER IS IN THIS FORMAT "+23480********"
     elif phone_number_input.startswith('+234'):
         if phone_number_input[4] in ['8', '7', '9']:
             if phone_number_input[5] in ['0', '1']:
-                return {'success': True, 'message': 'Phone number was successfully verified'}
+                return True
             else:
-                return {'success': False, 'message': 'Invalid phone number'}
+                False
         else:
-            return {'success': False, 'message': 'Invalid phone number'}
+            False
         
     else:
-        return {'success': False, 'message': 'Invalid phone number'}
+        False
                 
 if __name__ == "__main__":
     pass
