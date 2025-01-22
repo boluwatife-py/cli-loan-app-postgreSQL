@@ -86,12 +86,16 @@ def is_valid_fullname(fullname):
 class SuccessBar(Bar):
     message = Fore.GREEN + "Success" + Style.RESET_ALL
     fill = Fore.GREEN + "█" + Style.RESET_ALL
+    bar_prefix = Fore.GREEN + "" + Style.RESET_ALL
+    bar_suffix = Fore.GREEN + "" + Style.RESET_ALL
     suffix = ''
 
 # Error Progress Bar (Red)
 class ErrorBar(Bar):
     message = Fore.RED + "Error" + Style.RESET_ALL
     fill = Fore.RED + "█" + Style.RESET_ALL
+    bar_prefix = Fore.RED + "" + Style.RESET_ALL
+    bar_suffix = Fore.RED + "" + Style.RESET_ALL
     suffix = ''
 
 

@@ -12,7 +12,7 @@ def authenticate_user(identifier, identifier_type, password):
     if user['success']:
         next = validate_password(password=password, user_id=user['user'])
         if next['success'] == True:
-            return {'success': True, 'user': user, 'message': 'Login successful'}
+            return {'success': True, 'user': user['user'], 'message': 'Login successful'}
         else:
             return next
     else:

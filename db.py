@@ -1,5 +1,6 @@
 import psycopg2
 import bcrypt
+from datetime import datetime
 
 conn = psycopg2.connect(database = "LAir", 
                         user = "postgres", 
@@ -22,9 +23,9 @@ cur = conn.cursor()
 #     name VARCHAR(100) NOT NULL,
 #     email VARCHAR(100) UNIQUE NOT NULL,
 #     password VARCHAR(255) NOT NULL,
-#     dob DATE NOT NULL,
 #     phone_number VARCHAR(15) UNIQUE NOT NULL,
 #     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+#     dob DATE NOT NULL,
 # );
 # """
 # cur.execute(user_db)
@@ -82,8 +83,49 @@ cur = conn.cursor()
 # """
 # cur.execute(admin_db)
 
+# userFin = """CREATE TABLE UserFinancials (
+#     financial_id SERIAL PRIMARY KEY,                  
+#     user_id INT NOT NULL,                             
+#     balance DECIMAL(15, 2) DEFAULT 0.00,              
+#     amount_owed DECIMAL(15, 2) DEFAULT 0.00,          
+#     loan_capability DECIMAL(15, 2) NOT NULL,          
+#     total_loans_taken DECIMAL(15, 2) DEFAULT 0.00,    
+#     last_loan_date DATE,                              
+#     account_status VARCHAR(20) DEFAULT 'active',      
+#     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,   
+#     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
+#     CONSTRAINT fk_user_financial FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+# );"""
+
+# cur.execute(userFin)
+
+
+# his = """CREATE TABLE transfer_history(
+#     if SERIAL PRIMARY KEY,
+#     user_id INT NOT NULL,
+#     date_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+#     sender VARCHAR(255) NOT NULL,
+#     receiver VARCHAR(255) NOT NULL,
+#     amount DECIMAL(15, 2) NOT NULL,
+#     CONSTRAINT fk_user_transaction FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE)
+#     """
+    
+# cur.execute(his)
+
+# ls = """
+#         CREATE TABLE IF NOT EXISTS LoanSystem (
+#             id SERIAL PRIMARY KEY,
+#             available_funds DECIMAL(15, 2) NOT NULL,   
+#             total_loans_given DECIMAL(15, 2) DEFAULT 0,
+#             total_earnings DECIMAL(15, 2) DEFAULT 0,   
+#             last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+#         );
+#         """
+
 # ## COMMITTING THE DATA
 # conn.commit()
+
+
 
 def is_email_in_db(email):
     try:
@@ -152,7 +194,15 @@ def query_user(**kwargs):
 def user(id):
     try:
         cur.execute("SELECT * FROM Users WHERE user_id = %s", (id,))
-        return cur.fetchone()
+        dat = cur.fetchone()
+        return {
+            "user_id": dat[0],
+            "name": dat[1],
+            "email": dat[2],
+            "password": dat[3],
+            "dob": dat[6],
+            "phone_number": dat[4]
+        }
     except psycopg2.Error as e:
         print(f"Database error: {e}")
         return None
@@ -197,5 +247,132 @@ def create_user(name, email, phone_number, password, dob):
     
     return {'success': True, 'user': user_id, 'message': 'Account created successfully'}
 
-if __name__ == "__main__":
-    pass
+def get_or_create_user_financial(user_id):
+    """
+    Get or create a financial account for a user.
+    
+    Args:
+        conn: The psycopg2 connection object.
+        user_id: The ID of the user.
+
+    Returns:
+        dict: The user's financial account details.
+    """
+    try:
+        cur.execute("""
+            SELECT * FROM UserFinancials WHERE user_id = %s;
+        """, (user_id,))
+        financial_account = cur.fetchone()
+
+        # If it exists, return it
+        if financial_account:
+            return {
+                "financial_id": financial_account[0],
+                "user_id": financial_account[1],
+                "balance": financial_account[2],
+                "amount_owed": financial_account[3],
+                "loan_capability": financial_account[4],
+                "total_loans_taken": financial_account[5],
+                "last_loan_date": financial_account[6],
+                "account_status": financial_account[7],
+                "created_at": financial_account[8],
+                "updated_at": financial_account[9]
+            }
+
+        cur.execute("""
+            INSERT INTO UserFinancials (
+                user_id, balance, amount_owed, loan_capability, 
+                total_loans_taken, account_status, created_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *;
+        """, (
+            user_id, 0.00, 0.00, 500000.00, 0.00, 'active', datetime.now(), datetime.now()
+        ))
+        financial_account = cur.fetchone()
+
+        
+        conn.commit()
+        
+        return {
+            "financial_id": financial_account[0],
+            "user_id": financial_account[1],
+            "balance": financial_account[2],
+            "amount_owed": financial_account[3],
+            "loan_capability": financial_account[4],
+            "total_loans_taken": financial_account[5],
+            "last_loan_date": financial_account[6],
+            "account_status": financial_account[7],
+            "created_at": financial_account[8],
+            "updated_at": financial_account[9]
+        }
+
+    except Exception as e:
+        conn.rollback()
+        raise e
+        
+class Transaction():
+    def __init__(self, user_id, financial_id):
+        self.user_id = user_id
+        self.financial_id = financial_id
+        
+    def fund_system(self, fund_amount):
+        cur.execute("""UPDATE LoanSystem SET available_funds = available_funds + %s, last_updated = CURRENT_TIMESTAMP""", (fund_amount))
+    
+    def take_loan(self, loan_amount):
+        try:
+            if loan_amount <= 0:
+                raise ValueError("Loan amount must be greater than 0.")
+            
+            cur.execute("BEGIN;")
+            cur.execute("""
+                UPDATE UserFinancials
+                SET balance = balance + %s, 
+                    amount_owed = amount_owed + %s,
+                    total_loans_taken = total_loans_taken + 1,
+                    last_loan_date = CURRENT_DATE
+                WHERE user_id = %s AND loan_capability >= %s AND amount_owed < loan_capability;
+            """, (loan_amount, loan_amount, self.user_id, loan_amount))
+            
+            
+            if cur.rowcount == 0:
+                raise Exception("Loan eligibility criteria not met.")
+
+            
+            cur.execute("""
+                UPDATE LoanSystem
+                SET available_funds = available_funds - %s,
+                    total_loans_given = total_loans_given + %s,
+                    last_updated = CURRENT_TIMESTAMP
+                WHERE available_funds >= %s;
+            """, (loan_amount, loan_amount, loan_amount))
+
+            
+            if cur.rowcount == 0:
+                raise Exception("Insufficient funds in the loan system.")
+
+            
+            cur.execute("""
+                INSERT INTO Loans (
+                    user_id, loan_amount, interest_rate, tenure_months, 
+                    status, created_at
+                )
+                VALUES (%s, %s, 0.40, 12, 'Approved', CURRENT_TIMESTAMP)
+                RETURNING loan_id;
+            """, (self.user_id, loan_amount))
+            loan_id = cur.fetchone()[0]
+
+            
+            cur.execute("""
+                INSERT INTO Transactions (
+                    user_id, loan_id, transaction_type, amount, transaction_date
+                )
+                VALUES (%s, %s, 'Credit', %s, CURRENT_DATE);
+            """, (self.user_id, loan_id, loan_amount))
+
+            
+            cur.execute("COMMIT;")
+            return {'success': True, 'message': 'Loan Successfull'}
+
+        except Exception as e:
+            cur.execute("ROLLBACK;")
+            return {'success': False, 'message': f'Error while processing loan: {e}'}
