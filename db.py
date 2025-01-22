@@ -376,3 +376,84 @@ class Transaction():
         except Exception as e:
             cur.execute("ROLLBACK;")
             return {'success': False, 'message': f'Error while processing loan: {e}'}
+
+    def repay_loan(self, repayment_amount):
+        try:
+            
+            if repayment_amount <= 0:
+                raise ValueError("Repayment amount must be greater than 0.")
+            
+            
+            cur.execute("BEGIN;")
+            
+            
+            cur.execute("""
+                UPDATE UserFinancials
+                SET balance = balance - %s, 
+                    amount_owed = amount_owed - %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = %s AND balance >= %s AND amount_owed >= %s;
+            """, (repayment_amount, repayment_amount, self.user_id, repayment_amount, repayment_amount))
+
+            
+            if cur.rowcount == 0:
+                raise Exception("Insufficient balance or invalid repayment amount.")
+            
+            
+            cur.execute("""
+                UPDATE Repayments
+                SET amount_paid = amount_paid + %s, 
+                    status = CASE 
+                                WHEN amount_paid + %s >= amount_due THEN 'Paid' 
+                                ELSE 'Pending' 
+                            END
+                WHERE loan_id IN (
+                    SELECT loan_id 
+                    FROM Loans 
+                    WHERE user_id = %s AND status = 'Approved'
+                    ORDER BY created_at ASC
+                    LIMIT 1
+                )
+                RETURNING loan_id;
+            """, (repayment_amount, repayment_amount, self.user_id))
+            
+            
+            result = cur.fetchone()
+            if not result:
+                raise Exception("No pending loans found to apply the repayment.")
+            loan_id = result[0]
+
+            
+            cur.execute("""
+                UPDATE LoanSystem
+                SET available_funds = available_funds + %s, 
+                    total_earnings = total_earnings + (%s * 0.05), -- Assuming 5% earnings
+                    last_updated = CURRENT_TIMESTAMP;
+            """, (repayment_amount, repayment_amount))
+
+            
+            cur.execute("""
+                INSERT INTO Transactions (
+                    user_id, loan_id, transaction_type, amount, transaction_date
+                )
+                VALUES (%s, %s, 'Debit', %s, CURRENT_DATE);
+            """, (self.user_id, loan_id, repayment_amount))
+
+            
+            cur.execute("""
+                UPDATE Loans
+                SET status = 'Repaid'
+                WHERE loan_id = %s AND 
+                    NOT EXISTS (
+                        SELECT 1 FROM Repayments 
+                        WHERE loan_id = %s AND status = 'Pending'
+                    );
+            """, (loan_id, loan_id))
+
+            
+            cur.execute("COMMIT;")
+            print(f"Repayment of {repayment_amount} successfully applied to loan {loan_id} for user {self.user_id}.")
+
+        except Exception as e:
+            cur.execute("ROLLBACK;")
+            print(f"Error while processing loan repayment: {e}")

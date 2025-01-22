@@ -225,7 +225,7 @@ class Dashboard():
         while True:
             if loan_amount > self.finance['loan_capability']:
                 print(Fore.RED + Style.DIM + f"Loan request exceeds loan capability. Maximum loan amount: ₦{self.finance['loan_capability']}" + Style.RESET_ALL)
-                print(Fore.BLUE + "Please re-enter your email or phone number" + Style.RESET_ALL)
+                print(Fore.BLUE + "Please re-enter the loan amount you will like to take." + Style.RESET_ALL)
             else:
                 break
         
@@ -252,3 +252,35 @@ class Dashboard():
 
     def _repay_loan(self):
         amount_to_pay = questionary.text(f'   How much will you like to pay (Acct Balance ₦{self.finance['balance']}) >>>', qmark="").ask()
+        try:
+            amount_to_pay = float(amount_to_pay)
+        except TypeError:
+            print(Fore.RED + Style.BRIGHT + 'Amount should be a number' + Style.RESET_ALL)
+        except  Exception as e:
+            print(Fore.RED + Style.BRIGHT + e + Style.RESET_ALL)
+            
+        while True:
+            if amount_to_pay > self.finance['balance']:
+                print(Fore.RED + Style.DIM + f"You dont have upto {amount_to_pay} in your account. (Acct Balance ₦{self.finance['balance']})" + Style.RESET_ALL)
+                print(Fore.BLUE + "Please re-enter how much you will like to pay." + Style.RESET_ALL)
+            else:
+                break
+            
+        pin = questionary.password('   Enter your pin to complete transaction >>>', qmark='').ask()
+        pent = validate_password(user_id=self.user['user_id'], password=pin)
+            
+        if pent['success'] == True:
+            transaction = Transaction(user_id=self.user['user_id'], financial_id=self.finance['financial_id']).repay_loan(repayment_amount=amount_to_pay)
+            if transaction['success'] == True:
+                show_progress(SuccessBar, duration=2)
+                print(Fore.GREEN + Style.BRIGHT + transaction['message'] + Style.RESET_ALL)
+                time.sleep(2)
+                self._user_dashboard()
+            else:
+                print(Fore.RED + Style.BRIGHT + transaction['message'] + Style.RESET_ALL)
+                show_progress(ErrorBar, duration=1)
+                self._user_dashboard
+        else:
+            print(Fore.BLUE + "You entered a wrong pin :(" + Style.RESET_ALL)
+            show_progress(ErrorBar, duration=0.5)
+            self._user_dashboard()
