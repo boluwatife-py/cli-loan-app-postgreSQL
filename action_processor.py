@@ -9,7 +9,7 @@ import platform
 from db import get_or_create_user_financial, user, validate_password, Transaction, get_user_loans
 import time
 from questionary import Style as t
-from datetime import datetime
+from datetime import datetime, timedelta
 
 custom_style_fancy = t([
     ('qmark', 'fg:#673ab7 bold'),
@@ -30,7 +30,7 @@ dim_style = t([
 
 dim_style2 = t([
     ('question', 'fg:#424242'),
-    ('answer', 'fg:#424242 bold'),
+    ('answer', 'fg:#171717'),
     ('pointer', 'fg:#673ab7 bold'),
     ('highlighted', 'fg:#673ab7 bold'),
     ('instruction', 'fg:#212121'),
@@ -45,6 +45,7 @@ def clear_screen():
         os.system("cls")
     else:
         os.system("clear")
+
 
 class Pages:
     def __init__(self):
@@ -99,9 +100,8 @@ class Pages:
                 identifier_type = 'phone-number'
                 break
             else:
-                print(is_valid_phone_number(identifier))
-                print(Fore.RED + Style.BRIGHT + "Invalid email or phone number :(" + Style.RESET_ALL)
-                print(Fore.BLUE + "Please re-enter your email or phone number" + Style.RESET_ALL)
+                print(Fore.RED + Style.BRIGHT + "      Invalid email or phone number :(" + Style.RESET_ALL)
+                print(Fore.BLUE + "      Please re-enter your email or phone number" + Style.RESET_ALL)
                 
         pin = questionary.password('   Enter your pin >>>', qmark='',).ask()
         log = login(password=pin, **{identifier_type: identifier})
@@ -109,6 +109,7 @@ class Pages:
         if log['success'] == False:
             print(Fore.RED + Style.BRIGHT +  log['message'] + Style.RESET_ALL)
             show_progress(bar_class=ErrorBar, duration=2)
+            self.main()
         else:
             print(Fore.GREEN + Style.BRIGHT + log['message'] + Style.RESET_ALL)
             show_progress(bar_class=SuccessBar)
@@ -180,21 +181,18 @@ class Pages:
         
     def quit(self):
         sys.exit(0)
-        
-        
-        
-        
+
+
 class Dashboard():
     def __init__(self, u):
         self.user_id = u
         self.refresh_data()
-        
+
     def refresh_data(self):
         self.user = user(self.user_id)
         self.finance = get_or_create_user_financial(self.user_id)
         self.loans = get_user_loans(self.user_id)
-    
-    
+
     def _user_dashboard(self):
         clear_screen()
         
@@ -229,16 +227,11 @@ class Dashboard():
             self.userAcc = {}
             self.userFin = {}
             Pages().main()
-            
+
     def _take_loan(self):
         self.refresh_data()
         max_loan_amount = self.finance['loan_capability'] - self.finance['amount_owed']
-        current_date = datetime.now()
-        days_difference = (repayment_date_obj - current_date).days
-        interest_rate = 0.04
-        daily_interest_rate = interest_rate / 365
-        total_interest = loan_amount * daily_interest_rate * days_difference
-        amount_due = loan_amount + total_interest
+        
         while True:
             loan_amount = questionary.text(
                 f"   How much loan would you like to take (MAX ₦{max_loan_amount}) >>>",
@@ -272,8 +265,19 @@ class Dashboard():
                     print(Fore.RED + Style.DIM + "    Repayment date must be in the future. Please try again." + Style.RESET_ALL)
                     continue
 
+                current_date = datetime.now()
+                days_difference = (repayment_date_obj - current_date).days
+                interest_rate = 0.04
+                daily_interest_rate = interest_rate / 365
+                total_interest = loan_amount * daily_interest_rate * days_difference
+                amount_due = loan_amount + total_interest
                 
+                max_repayment_date = current_date + timedelta(days=2 * 365)
                 
+                if repayment_date_obj > max_repayment_date:
+                    print(Fore.RED + Style.DIM + f"    The repayment date cannot exceed 2 years from today ({max_repayment_date.strftime('%B %d, %Y')}). Please choose an earlier date." + Style.RESET_ALL)
+                    continue
+                    
                 
                 while True:
                     choice = questionary.select(
@@ -323,50 +327,68 @@ class Dashboard():
             else:
                 print(Fore.RED + Style.BRIGHT + transaction['message'] + Style.RESET_ALL)
                 show_progress(ErrorBar, duration=1)
+                questionary.press_any_key_to_continue(style=dim_style).ask()
+                self._user_dashboard()
+                
+                
         else:
             print(Fore.BLUE + "You entered a wrong pin :(" + Style.RESET_ALL)
             show_progress(ErrorBar, duration=0.5)
-            # self._user_dashboard()
-
+            questionary.press_any_key_to_continue(style=dim_style).ask()    
+            self._user_dashboard()
 
     def _repay_loan(self):
         self.refresh_data()
-        formatted_loans = []
+        amount_to_pay = questionary.text('How much do you want to pay >>>', qmark='').ask()
+        try:
+            amount_to_pay = float(amount_to_pay)
+        except TypeError:
+            print(Fore.RED + Style.BRIGHT + 'Amount should be a number' + Style.RESET_ALL)
+        except  Exception as e:
+            print(Fore.RED + Style.BRIGHT + e + Style.RESET_ALL)
+            
+        while True:
+            if amount_to_pay > self.finance['balance']:
+                print(Fore.RED + Style.DIM + f"You dont have upto {amount_to_pay} in your account. (Acct Balance ₦{self.finance['balance']})" + Style.RESET_ALL)
+                print(Fore.BLUE + "Please re-enter how much you will like to pay." + Style.RESET_ALL)
+            else:
+                break
+            
+        formatted_loans = {}
         for loan in self.loans:
-            formatted_loans.append(f"₦{loan[2]:,.2f} on {loan[6].strftime('%B %d %Y')} for {loan[4]} months with interest of {loan[3]:2f} >> Total ")
-            
-        print(formatted_loans)
+            formatted_string = (
+                f"   ₦{loan[2]:,.2f} loaned {loan[6].strftime('%B %d %Y')} "
+                f"for {loan[4]} months with interest of {loan[3]:.2f}."
+            )
+            formatted_loans[formatted_string] = loan[0]
+
         
-        # amount_to_pay = questionary.select("Select the loan you want to repay", choices=(self.loans)).ask()
-        # try:
-        #     amount_to_pay = float(amount_to_pay)
-        # except TypeError:
-        #     print(Fore.RED + Style.BRIGHT + 'Amount should be a number' + Style.RESET_ALL)
-        # except  Exception as e:
-        #     print(Fore.RED + Style.BRIGHT + e + Style.RESET_ALL)
+        selected_loan = questionary.select(
+            "Select the loan you want to repay -",
+            choices=list(formatted_loans.keys()),
+            qmark='',
+            style=dim_style2
+        ).ask()
+
+        selected_loan_id = formatted_loans[selected_loan]
+        
+        pin = questionary.password('Enter your pin to complete transaction >>>', qmark='').ask()
+        pent = validate_password(user_id=self.user['user_id'], password=pin)
             
-        # while True:
-        #     if amount_to_pay > self.finance['balance']:
-        #         print(Fore.RED + Style.DIM + f"You dont have upto {amount_to_pay} in your account. (Acct Balance ₦{self.finance['balance']})" + Style.RESET_ALL)
-        #         print(Fore.BLUE + "Please re-enter how much you will like to pay." + Style.RESET_ALL)
-        #     else:
-        #         break
-            
-        # pin = questionary.password('   Enter your pin to complete transaction >>>', qmark='').ask()
-        # pent = validate_password(user_id=self.user['user_id'], password=pin)
-            
-        # if pent['success'] == True:
-        #     transaction = Transaction(user_id=self.user['user_id'], financial_id=self.finance['financial_id']).repay_loan(repayment_amount=amount_to_pay)
-        #     if transaction['success'] == True:
-        #         show_progress(SuccessBar, duration=2)
-        #         print(Fore.GREEN + Style.BRIGHT + transaction['message'] + Style.RESET_ALL)
-        #         time.sleep(2)
-        #         self._user_dashboard()
-        #     else:
-        #         print(Fore.RED + Style.BRIGHT + transaction['message'] + Style.RESET_ALL)
-        #         show_progress(ErrorBar, duration=1)
-        #         self._user_dashboard()
-        # else:
-        #     print(Fore.BLUE + "You entered a wrong pin :(" + Style.RESET_ALL)
-        #     show_progress(ErrorBar, duration=1)
-        #     self._user_dashboard()
+        if pent['success'] == True:
+            transaction = Transaction(user_id=self.user['user_id'], financial_id=self.finance['financial_id']).repay_loan(repayment_amount=amount_to_pay, loan_id=selected_loan_id)
+            if transaction['success'] == True:
+                print(Fore.GREEN + Style.BRIGHT + transaction['message'] + Style.RESET_ALL)
+                show_progress(SuccessBar, duration=2)
+                questionary.press_any_key_to_continue(style=dim_style).ask()
+                self._user_dashboard()
+            else:
+                print(Fore.RED + Style.BRIGHT + transaction['message'] + Style.RESET_ALL)
+                show_progress(ErrorBar, duration=1)
+                questionary.press_any_key_to_continue(style=dim_style).ask()
+                self._user_dashboard()
+        else:
+            print(Fore.BLUE + "You entered a wrong pin :(" + Style.RESET_ALL)
+            show_progress(ErrorBar, duration=1)
+            questionary.press_any_key_to_continue(style=dim_style).ask()
+            self._user_dashboard()
