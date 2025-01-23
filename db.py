@@ -1,6 +1,7 @@
 import psycopg2
 import bcrypt
 from datetime import datetime
+from math import ceil
 
 conn = psycopg2.connect(database = "LAir", 
                         user = "postgres", 
@@ -309,21 +310,65 @@ def get_or_create_user_financial(user_id):
     except Exception as e:
         conn.rollback()
         raise e
-        
+
+def get_user_loans(user_id):
+    try:
+        cur.execute("SELECT * FROM Loans WHERE user_id = %s ORDER BY created_at DESC", (user_id,))
+        loans = cur.fetchall()
+        return loans
+
+    except psycopg2.Error as e:
+        return f'Database error: {e}'
+
+    except Exception as e:
+        return f"An unexpected error occurred: {e}"
+    
 class Transaction():
     def __init__(self, user_id, financial_id):
         self.user_id = user_id
         self.financial_id = financial_id
         
     def fund_system(self, fund_amount):
-        cur.execute("""UPDATE LoanSystem SET available_funds = available_funds + %s, last_updated = CURRENT_TIMESTAMP""", (fund_amount))
+        try:
+            if fund_amount <= 0:
+                raise ValueError("Fund amount must be greater than 0.")
+            
+            cur.execute("BEGIN;")
+            cur.execute("""
+                UPDATE LoanSystem 
+                SET available_funds = available_funds + %s, 
+                    last_updated = CURRENT_TIMESTAMP;
+            """, (fund_amount,))
+            cur.execute("COMMIT;")
+            return {'success': True, 'message': 'Funds successfully added to the system.'}
+        
+        except Exception as e:
+            cur.execute("ROLLBACK;")
+            return {'success': False, 'message': f'Error funding system: {e}'}
     
-    def take_loan(self, loan_amount):
+    def take_loan(self, loan_amount, repayment_date):
         try:
             if loan_amount <= 0:
                 raise ValueError("Loan amount must be greater than 0.")
             
             cur.execute("BEGIN;")
+            # Calculate repayment details
+            repayment_date_obj = datetime.strptime(repayment_date, "%Y-%m-%d")
+            current_date = datetime.now()
+            days_difference = (repayment_date_obj - current_date).days
+            interest_rate = 0.04
+            daily_interest_rate = interest_rate / 365
+            total_interest = loan_amount * daily_interest_rate * days_difference
+            amount_due = loan_amount + total_interest
+            tenure_months = ceil((repayment_date_obj.year - current_date.year) * 12 + (repayment_date_obj.month - current_date.month))
+            
+            if repayment_date_obj.day < current_date.day:
+                tenure_months -= 1
+                
+            if tenure_months > 24:
+                raise ValueError("The repayment date must be within 2 years from today. Please choose an earlier date.")
+            
+            # Check user financials and eligibility
             cur.execute("""
                 UPDATE UserFinancials
                 SET balance = balance + %s, 
@@ -331,13 +376,12 @@ class Transaction():
                     total_loans_taken = total_loans_taken + 1,
                     last_loan_date = CURRENT_DATE
                 WHERE user_id = %s AND loan_capability >= %s AND amount_owed < loan_capability;
-            """, (loan_amount, loan_amount, self.user_id, loan_amount))
-            
+            """, (loan_amount, total_interest, self.user_id, loan_amount))
             
             if cur.rowcount == 0:
                 raise Exception("Loan eligibility criteria not met.")
-
             
+            # Deduct from loan system funds
             cur.execute("""
                 UPDATE LoanSystem
                 SET available_funds = available_funds - %s,
@@ -345,115 +389,44 @@ class Transaction():
                     last_updated = CURRENT_TIMESTAMP
                 WHERE available_funds >= %s;
             """, (loan_amount, loan_amount, loan_amount))
-
             
             if cur.rowcount == 0:
                 raise Exception("Insufficient funds in the loan system.")
-
             
+            # Insert into Loans table
             cur.execute("""
                 INSERT INTO Loans (
                     user_id, loan_amount, interest_rate, tenure_months, 
                     status, created_at
                 )
-                VALUES (%s, %s, 0.40, 12, 'Approved', CURRENT_TIMESTAMP)
+                VALUES (%s, %s, 0.04, %s, 'Approved', CURRENT_TIMESTAMP)
                 RETURNING loan_id;
-            """, (self.user_id, loan_amount))
+            """, (self.user_id, loan_amount, tenure_months))
             loan_id = cur.fetchone()[0]
-
             
+            
+            # Insert into Repayments table
+            cur.execute("""
+                INSERT INTO Repayments (
+                    loan_id, due_date, amount_due
+                )
+                VALUES (%s, %s, %s);
+            """, (loan_id, repayment_date, amount_due))
+            
+            # Insert transaction record
             cur.execute("""
                 INSERT INTO Transactions (
                     user_id, loan_id, transaction_type, amount, transaction_date
                 )
                 VALUES (%s, %s, 'Credit', %s, CURRENT_DATE);
             """, (self.user_id, loan_id, loan_amount))
-
             
             cur.execute("COMMIT;")
-            return {'success': True, 'message': 'Loan Successfull'}
-
+            return {'success': True, 'message': f"Loan successfully approved. Due on {repayment_date}: ₦{amount_due:.2f}"}
+        
         except Exception as e:
             cur.execute("ROLLBACK;")
-            return {'success': False, 'message': f'Error while processing loan: {e}'}
+            return {'success': False, 'message': f"Error while processing loan: {e}"}
 
-    def repay_loan(self, repayment_amount):
-        try:
-            
-            if repayment_amount <= 0:
-                raise ValueError("Repayment amount must be greater than 0.")
-            
-            
-            cur.execute("BEGIN;")
-            
-            
-            cur.execute("""
-                UPDATE UserFinancials
-                SET balance = balance - %s, 
-                    amount_owed = amount_owed - %s,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = %s AND balance >= %s AND amount_owed >= %s;
-            """, (repayment_amount, repayment_amount, self.user_id, repayment_amount, repayment_amount))
 
-            
-            if cur.rowcount == 0:
-                raise Exception("Insufficient balance or invalid repayment amount.")
-            
-            
-            cur.execute("""
-                UPDATE Repayments
-                SET amount_paid = amount_paid + %s, 
-                    status = CASE 
-                                WHEN amount_paid + %s >= amount_due THEN 'Paid' 
-                                ELSE 'Pending' 
-                            END
-                WHERE loan_id IN (
-                    SELECT loan_id 
-                    FROM Loans 
-                    WHERE user_id = %s AND status = 'Approved'
-                    ORDER BY created_at ASC
-                    LIMIT 1
-                )
-                RETURNING loan_id;
-            """, (repayment_amount, repayment_amount, self.user_id))
-            
-            
-            result = cur.fetchone()
-            if not result:
-                raise Exception("No pending loans found to apply the repayment.")
-            loan_id = result[0]
-
-            
-            cur.execute("""
-                UPDATE LoanSystem
-                SET available_funds = available_funds + %s, 
-                    total_earnings = total_earnings + (%s * 0.05), -- Assuming 5% earnings
-                    last_updated = CURRENT_TIMESTAMP;
-            """, (repayment_amount, repayment_amount))
-
-            
-            cur.execute("""
-                INSERT INTO Transactions (
-                    user_id, loan_id, transaction_type, amount, transaction_date
-                )
-                VALUES (%s, %s, 'Debit', %s, CURRENT_DATE);
-            """, (self.user_id, loan_id, repayment_amount))
-
-            
-            cur.execute("""
-                UPDATE Loans
-                SET status = 'Repaid'
-                WHERE loan_id = %s AND 
-                    NOT EXISTS (
-                        SELECT 1 FROM Repayments 
-                        WHERE loan_id = %s AND status = 'Pending'
-                    );
-            """, (loan_id, loan_id))
-
-            
-            cur.execute("COMMIT;")
-            print(f"Repayment of {repayment_amount} successfully applied to loan {loan_id} for user {self.user_id}.")
-
-        except Exception as e:
-            cur.execute("ROLLBACK;")
-            print(f"Error while processing loan repayment: {e}")
+    
