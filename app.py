@@ -1,7 +1,7 @@
-import action_processor
+import processor
 
 
 
 
-data = action_processor.Pages()
+data = processor.Pages()
 data.main()

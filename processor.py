@@ -6,8 +6,7 @@ import sys
 from auth import login, signup
 import os
 import platform
-from db import get_or_create_user_financial, user, validate_password, Transaction, get_user_loans
-import time
+from schema import get_or_create_user_financial, user, validate_password, Transaction, get_user_loans, Decimal
 from questionary import Style as t
 from datetime import datetime, timedelta
 
@@ -243,8 +242,14 @@ class Dashboard():
                 if loan_amount <= 0:
                     print(Fore.RED + Style.DIM + "      Loan amount must be greater than 0." + Style.RESET_ALL)
                     continue
+                
                 if loan_amount > max_loan_amount:
                     print(Fore.RED + Style.DIM + f"      Loan request exceeds loan capability. Maximum loan amount: ₦{max_loan_amount}" + Style.RESET_ALL)
+                    if max_loan_amount == 0:
+                        print(Fore.BLUE + "      Please pay off your debt." + Style.RESET_ALL)
+                        questionary.press_any_key_to_continue(style=dim_style).ask()
+                        self._user_dashboard()
+                        
                     print(Fore.BLUE + "      Please re-enter the loan amount you would like to take." + Style.RESET_ALL)
                     continue
                 break
@@ -339,20 +344,22 @@ class Dashboard():
 
     def _repay_loan(self):
         self.refresh_data()
-        amount_to_pay = questionary.text('How much do you want to pay >>>', qmark='').ask()
-        try:
-            amount_to_pay = float(amount_to_pay)
-        except TypeError:
-            print(Fore.RED + Style.BRIGHT + 'Amount should be a number' + Style.RESET_ALL)
-        except  Exception as e:
-            print(Fore.RED + Style.BRIGHT + e + Style.RESET_ALL)
-            
         while True:
-            if amount_to_pay > self.finance['balance']:
-                print(Fore.RED + Style.DIM + f"You dont have upto {amount_to_pay} in your account. (Acct Balance ₦{self.finance['balance']})" + Style.RESET_ALL)
-                print(Fore.BLUE + "Please re-enter how much you will like to pay." + Style.RESET_ALL)
-            else:
-                break
+            amount_to_pay = questionary.text('How much do you want to pay >>>', qmark='').ask()
+            try:
+                amount_to_pay = Decimal(amount_to_pay)
+                
+                if self.finance['balance'] < amount_to_pay:
+                    print(amount_to_pay, self.finance)
+                    print(Fore.RED + Style.DIM + f"   You don't have enough balance to pay ₦{amount_to_pay:2f}. (Acct Balance: ₦{self.finance['balance']:2f})" + Style.RESET_ALL)
+                    print(Fore.BLUE + "   Please re-enter how much you would like to pay." + Style.RESET_ALL)
+                else:
+                    break
+
+            except ValueError:
+                print(Fore.RED + Style.BRIGHT + '   Amount should be a valid number.' + Style.RESET_ALL)
+            except Exception as e:
+                print(Fore.RED + Style.BRIGHT + str(e) + Style.RESET_ALL)
             
         formatted_loans = {}
         for loan in self.loans:
