@@ -468,7 +468,7 @@ class Dashboard():
         except Exception as e:
             print(Fore.RED + Style.DIM + '      We encountered an error processing account number : %s', e + Style.RESET_ALL)
         
-        # print('ekjew'.up)
+        
         print("\n   Transfer " + Fore.LIGHTBLACK_EX + f'₦{amount}' + Style.RESET_ALL + ' to \n' + Fore.LIGHTBLACK_EX + f'   {user(id=prob_u['user'])['name'].upper()}' + Style.RESET_ALL )
         
         pin = questionary.password("  Enter your pin to complete transaction // (or type \"exit\" to quit)>>>", qmark="").ask()
@@ -478,9 +478,7 @@ class Dashboard():
         
         pent = validate_password(self.user['user_id'], pin)
         if pent['success']:
-            print('Successfully')
-            #TRANSFER LOGIN HERE
-   
+            response = Transaction(user_id=self.user_id, financial_id=self.finance).send_money(amount=5000, receiver_id=prob_u['user'])
         else:
             print(Fore.BLUE + "You entered a wrong pin :(" + Style.RESET_ALL)
             show_progress(ErrorBar, duration=0.5)

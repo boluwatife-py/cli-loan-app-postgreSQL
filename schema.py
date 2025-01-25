@@ -527,24 +527,91 @@ class Transaction():
             cur.execute("ROLLBACK;")
             return {'success': False, 'message': f"Error while processing repayment: {e}"}
 
-    def send_money(self, amount, user):
+    def send_money(self, amount, receiver_id):
         try:
             if amount <= 0:
-                raise ValueError("Repayment amount must be greater than 0.")
-            
+                raise ValueError("Transfer amount must be greater than 0.")
+
             amount = Decimal(amount)
-            
+
+            # Start a transaction
             cur.execute("BEGIN;")
-            
+
+            # Fetch the sender's balance
             cur.execute("""
-                        UPDATE userFinancials
-                        SET balance = balance - %s WHERE user_id = %s""", ())
-            
+                SELECT balance 
+                FROM UserFinancials 
+                WHERE user_id = %s;
+            """, (self.user_id,))
+            sender_info = cur.fetchone()
+
+            if not sender_info:
+                raise Exception("Sender not found.")
+
+            sender_balance = Decimal(sender_info[0])
+
+            # Check if sender has enough balance
+            if sender_balance < amount:
+                raise Exception(f"Insufficient funds. Your balance is ₦{sender_balance:,.2f}.")
+
+            # Fetch the receiver's financial info
+            cur.execute("""
+                SELECT user_id 
+                FROM UserFinancials 
+                WHERE user_id = %s;
+            """, (receiver_id,))
+            receiver_info = cur.fetchone()
+
+            if not receiver_info:
+                raise Exception("Receiver not found.")
+
+            # Deduct the amount from the sender's balance
+            cur.execute("""
+                UPDATE UserFinancials
+                SET balance = balance - %s
+                WHERE user_id = %s;
+            """, (amount, self.user_id))
+
+            # Credit the amount to the receiver's balance
+            cur.execute("""
+                UPDATE UserFinancials
+                SET balance = balance + %s
+                WHERE user_id = %s;
+            """, (amount, receiver_id))
+
+            # Add a transaction record for the sender
+            cur.execute("""
+                INSERT INTO Transactions (user_id, transaction_type, amount, transaction_date)
+                VALUES (%s, 'Debit', %s, CURRENT_TIMESTAMP);
+            """, (self.user_id, amount))
+
+            # Add a transaction record for the receiver
+            cur.execute("""
+                INSERT INTO Transactions (user_id, transaction_type, amount, transaction_date)
+                VALUES (%s, 'Credit', %s, CURRENT_TIMESTAMP);
+            """, (receiver_id, amount))
+
+            # Add the transfer record to the transfer history
+            cur.execute("""
+                INSERT INTO transfer_history (user_id, sender, receiver, amount, date_created)
+                VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP);
+            """, (self.user_id, self.user_id, receiver_id, amount))
+
+            # Commit the transaction
             cur.execute("COMMIT;")
-        
+
+            return {
+                "success": True,
+                "message": f"Successfully transferred ₦{amount:,.2f} to user with ID {receiver_id}."
+            }
+
         except Exception as e:
             cur.execute("ROLLBACK;")
-            return {'success': False, 'message': f"Error while processing repayment: {e}"}
+            return {
+                "success": False,
+                "message": f"Error during money transfer: {e}"
+            }
+
 
     def fetch_user_balance(self):
         try:
