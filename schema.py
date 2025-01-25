@@ -217,6 +217,9 @@ def user(id):
 
 
 def validate_password(user_id, password):
+    if not password or not user_id:
+        return {'success': False, 'user':None, 'message':'Some fields are empty.'}
+        
     try:
         cur.execute(f"SELECT password FROM Users WHERE user_id='{user_id}'")
         result = cur.fetchone()[0]
@@ -230,11 +233,9 @@ def validate_password(user_id, password):
         else:
             return {'success': False, 'user':None, 'message':'User not found.'}
     except psycopg2.Error as e:
-        print(f"Database error: {e}")
-        return {'success': False, 'user':None, 'message':'Database error.'}
+        return {'success': False, 'user':None, 'message':f'Database error.{e}'}
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        return {'success': False, 'user':None, 'message':'Unknon Error.'}
+        return {'success': False, 'user':None, 'message': f'Unknon Error.{e}'}
     
     
 def create_user(name, email, phone_number, password, dob):
@@ -312,9 +313,20 @@ def get_or_create_user_financial(user_id):
         conn.rollback()
         raise e
 
-def get_user_loans(user_id):
+def get_user_unpaid_loans(user_id):
     try:
-        cur.execute("SELECT * FROM Loans WHERE user_id = %s AND status = 'pending' ORDER BY created_at DESC", (user_id,))
+        cur.execute(
+            """
+            SELECT 
+                Loans.loan_id, Loans.loan_amount, Loans.interest_rate, Loans.tenure_months, 
+                Loans.status, Loans.created_at, Repayments.amount_due, Repayments.amount_paid 
+            FROM Loans
+            JOIN Repayments ON Loans.loan_id = Repayments.loan_id
+            WHERE Loans.user_id = %s AND Repayments.status = 'Pending'
+            ORDER BY Loans.created_at DESC
+            """,
+            (user_id,)
+        )
         loans = cur.fetchall()
         return loans
 
@@ -462,7 +474,7 @@ class Transaction():
             
             if repayment_amount + amount_paid > amount_due:
                 excess_payment = repayment_amount + amount_paid - amount_due
-                repayment_amount = amount_due  # Only deduct the due amount
+                repayment_amount = amount_due
                 message = f"Repayment amount exceeds the amount due. ₦{excess_payment:,.2f} remains in your account."
             else:
                 message = f"Repayment of ₦{repayment_amount:,.2f} successfully processed."
@@ -514,3 +526,58 @@ class Transaction():
         except Exception as e:
             cur.execute("ROLLBACK;")
             return {'success': False, 'message': f"Error while processing repayment: {e}"}
+
+    def send_money(self, amount, user):
+        try:
+            if amount <= 0:
+                raise ValueError("Repayment amount must be greater than 0.")
+            
+            amount = Decimal(amount)
+            
+            cur.execute("BEGIN;")
+            
+            cur.execute("""
+                        UPDATE userFinancials
+                        SET balance = balance - %s WHERE user_id = %s""", ())
+            
+            cur.execute("COMMIT;")
+        
+        except Exception as e:
+            cur.execute("ROLLBACK;")
+            return {'success': False, 'message': f"Error while processing repayment: {e}"}
+
+    def fetch_user_balance(self):
+        try:
+            cur.execute(
+                """
+                SELECT 
+                    uf.balance, 
+                    COALESCE(SUM(r.amount_due - r.amount_paid), 0) AS total_outstanding_with_interest
+                FROM UserFinancials uf
+                LEFT JOIN Loans l ON uf.user_id = l.user_id
+                LEFT JOIN Repayments r ON l.loan_id = r.loan_id
+                WHERE uf.user_id = %s AND r.status = 'Pending'
+                GROUP BY uf.balance;
+                """,
+                (self.user_id,)
+            )
+            result = cur.fetchone()
+
+            if not result:
+                return {"success": False, "message": "User not found or no financial data available."}
+
+            balance, total_outstanding_with_interest = result
+
+            return {
+                "success": True,
+                "balance": float(balance),
+                "total_outstanding_with_interest": float(total_outstanding_with_interest)
+            }
+
+        except psycopg2.Error as e:
+            return {"success": False, "message": f"Database error: {e}"}
+
+        except Exception as e:
+            return {"success": False, "message": f"An unexpected error occurred: {e}"}
+
+print(Transaction(user_id=2, financial_id=3).fetch_user_balance())
