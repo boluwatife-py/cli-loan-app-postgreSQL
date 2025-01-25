@@ -203,7 +203,7 @@ class Dashboard():
                 'Repay Loan',
                 'Send Money',
                 'View Balance',
-                'Request Transction Gistory',
+                'Request Transction History',
                 'Change Pin',
                 'Refresh',
                 'Logout',
@@ -479,6 +479,16 @@ class Dashboard():
         pent = validate_password(self.user['user_id'], pin)
         if pent['success']:
             response = Transaction(user_id=self.user_id, financial_id=self.finance).send_money(amount=5000, receiver_id=prob_u['user'])
+            if response["success"]:
+                print(Fore.GREEN + Style.BRIGHT + f'Successfully transferred ₦{amount:,.2f} to user with ID {user(id=prob_u['user'])['name'].upper()}' + Style.RESET_ALL)
+                show_progress(SuccessBar, duration=2)
+                questionary.press_any_key_to_continue(style=dim_style).ask()
+                self._user_dashboard()
+            else:
+                print(Fore.RED + Style.BRIGHT + response['message'] + Style.RESET_ALL)
+                show_progress(ErrorBar, duration=1)
+                questionary.press_any_key_to_continue(style=dim_style).ask()
+                self._user_dashboard()
         else:
             print(Fore.BLUE + "You entered a wrong pin :(" + Style.RESET_ALL)
             show_progress(ErrorBar, duration=0.5)
@@ -509,4 +519,4 @@ class Dashboard():
             questionary.press_any_key_to_continue(style=dim_style).ask()    
             self._user_dashboard()
         
-            
+    

@@ -612,7 +612,6 @@ class Transaction():
                 "message": f"Error during money transfer: {e}"
             }
 
-
     def fetch_user_balance(self):
         try:
             cur.execute(
@@ -647,4 +646,53 @@ class Transaction():
         except Exception as e:
             return {"success": False, "message": f"An unexpected error occurred: {e}"}
 
-print(Transaction(user_id=2, financial_id=3).fetch_user_balance())
+    def get_transaction_history(self):
+        try:
+            # Fetch transactions for the user
+            cur.execute("""
+                SELECT 
+                    transaction_type,
+                    amount,
+                    transaction_date,
+                    COALESCE(receiver, '-') AS receiver,
+                    COALESCE(sender, '-') AS sender
+                FROM Transactions
+                LEFT JOIN transfer_history 
+                ON Transactions.user_id = transfer_history.user_id
+                WHERE Transactions.user_id = %s
+                ORDER BY transaction_date DESC;
+            """, (self.user_id,))
+            
+            transactions = cur.fetchall()
+            
+            if not transactions:
+                return {
+                    "success": True,
+                    "message": "No transaction history found.",
+                    "data": []
+                }
+
+            # Format the transaction history
+            formatted_transactions = [
+                {
+                    "type": transaction[0],
+                    "amount": f"₦{Decimal(transaction[1]):,.2f}",
+                    "date": transaction[2].strftime("%B %d, %Y, %I:%M %p"),
+                    "sender": transaction[4] if transaction[4] != "-" else "N/A",
+                    "receiver": transaction[3] if transaction[3] != "-" else "N/A"
+                }
+                for transaction in transactions
+            ]
+
+            return {
+                "success": True,
+                "message": "Transaction history retrieved successfully.",
+                "data": formatted_transactions
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Error retrieving transaction history: {e}",
+                "data": []
+            }
