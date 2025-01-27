@@ -528,81 +528,65 @@ class Transaction():
             return {'success': False, 'message': f"Error while processing repayment: {e}"}
 
     def send_money(self, amount, receiver_id):
+        print(receiver_id)
         try:
             if amount <= 0:
                 raise ValueError("Transfer amount must be greater than 0.")
 
             amount = Decimal(amount)
 
-            # Start a transaction
+            
             cur.execute("BEGIN;")
 
-            # Fetch the sender's balance
-            cur.execute("""
-                SELECT balance 
-                FROM UserFinancials 
-                WHERE user_id = %s;
-            """, (self.user_id,))
-            sender_info = cur.fetchone()
+            
+            sender_account = get_or_create_user_financial(self.user_id)
 
-            if not sender_info:
-                raise Exception("Sender not found.")
+            
+            receiver_account = get_or_create_user_financial(receiver_id)
 
-            sender_balance = Decimal(sender_info[0])
-
-            # Check if sender has enough balance
+            
+            sender_balance = Decimal(sender_account["balance"])
             if sender_balance < amount:
                 raise Exception(f"Insufficient funds. Your balance is ₦{sender_balance:,.2f}.")
 
-            # Fetch the receiver's financial info
-            cur.execute("""
-                SELECT user_id 
-                FROM UserFinancials 
-                WHERE user_id = %s;
-            """, (receiver_id,))
-            receiver_info = cur.fetchone()
-
-            if not receiver_info:
-                raise Exception("Receiver not found.")
-
-            # Deduct the amount from the sender's balance
+            
             cur.execute("""
                 UPDATE UserFinancials
                 SET balance = balance - %s
                 WHERE user_id = %s;
             """, (amount, self.user_id))
 
-            # Credit the amount to the receiver's balance
+            
             cur.execute("""
                 UPDATE UserFinancials
                 SET balance = balance + %s
                 WHERE user_id = %s;
             """, (amount, receiver_id))
 
-            # Add a transaction record for the sender
+            
             cur.execute("""
                 INSERT INTO Transactions (user_id, transaction_type, amount, transaction_date)
                 VALUES (%s, 'Debit', %s, CURRENT_TIMESTAMP);
             """, (self.user_id, amount))
-
-            # Add a transaction record for the receiver
+            
+            
             cur.execute("""
                 INSERT INTO Transactions (user_id, transaction_type, amount, transaction_date)
                 VALUES (%s, 'Credit', %s, CURRENT_TIMESTAMP);
             """, (receiver_id, amount))
 
-            # Add the transfer record to the transfer history
+            
             cur.execute("""
                 INSERT INTO transfer_history (user_id, sender, receiver, amount, date_created)
                 VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP);
             """, (self.user_id, self.user_id, receiver_id, amount))
 
-            # Commit the transaction
+            
             cur.execute("COMMIT;")
 
             return {
                 "success": True,
-                "message": f"Successfully transferred ₦{amount:,.2f} to user with ID {receiver_id}."
+                "message": f"Successfully transferred ₦{amount:,.2f} to {receiver_id}."
             }
 
         except Exception as e:
@@ -611,7 +595,7 @@ class Transaction():
                 "success": False,
                 "message": f"Error during money transfer: {e}"
             }
-
+            
     def fetch_user_balance(self):
         try:
             cur.execute(
@@ -651,36 +635,64 @@ class Transaction():
             cur.execute(
                 """
                 SELECT 
-                    Transactions.transaction_type,
-                    Transactions.amount,
-                    Transactions.transaction_date,
-                    Transactions.user_id AS sender_id,
-                    Transactions.loan_id,
-                    U1.name AS sender_name,
-                    U2.name AS receiver_name
-                FROM Transactions
-                LEFT JOIN Users AS U1 ON Transactions.user_id = U1.user_id
-                LEFT JOIN Loans ON Transactions.loan_id = Loans.loan_id
-                LEFT JOIN Users AS U2 ON Loans.user_id = U2.user_id
-                WHERE Transactions.user_id = %s
-                ORDER BY Transactions.transaction_date DESC;
+                    transaction_type,
+                    amount,
+                    transaction_date,
+                    sender_name,
+                    receiver_name
+                FROM (
+                    SELECT 
+                        Transactions.transaction_type,
+                        Transactions.amount,
+                        Transactions.transaction_date,
+                        CASE 
+                            WHEN Transactions.transaction_type = 'Credit' AND Transactions.loan_id IS NOT NULL THEN 'CLI_LP'
+                            WHEN Transactions.transaction_type = 'Debit' AND Transactions.loan_id IS NOT NULL THEN U1.name
+                            ELSE U1.name 
+                        END AS sender_name,
+                        CASE 
+                            WHEN Transactions.transaction_type = 'Debit' AND Transactions.loan_id IS NOT NULL THEN 'CLI_LP'
+                            WHEN Transactions.transaction_type = 'Credit' AND Transactions.loan_id IS NOT NULL THEN U2.name
+                            ELSE U2.name
+                        END AS receiver_name
+                    FROM Transactions
+                    LEFT JOIN Users AS U1 ON Transactions.user_id = U1.user_id
+                    LEFT JOIN Loans ON Transactions.loan_id = Loans.loan_id
+                    LEFT JOIN Users AS U2 ON Loans.user_id = U2.user_id
+                    WHERE Transactions.user_id = %s
+
+                    UNION ALL
+
+                    -- Transfer history for money transfers
+                    SELECT 
+                        'Transfer' AS transaction_type,
+                        transfer_history.amount,
+                        transfer_history.date_created AS transaction_date,
+                        U1.name AS sender_name,
+                        U2.name AS receiver_name
+                    FROM transfer_history
+                    LEFT JOIN Users AS U1 ON transfer_history.sender = U1.user_id
+                    LEFT JOIN Users AS U2 ON transfer_history.receiver = U2.user_id
+                    WHERE transfer_history.user_id = %s
+                ) AS combined_transactions
+                ORDER BY transaction_date DESC;
                 """,
-                (self.user_id,)
+                (self.user_id, self.user_id)
             )
             transactions = cur.fetchall()
 
             if not transactions:
                 return {"success": True, "data": []}
 
-            # Format transactions
+            # Format transactions for easier readability
             formatted_transactions = []
             for transaction in transactions:
                 formatted_transactions.append({
                     "type": transaction[0],
-                    "amount": f"₦{transaction[1]:,.2f}",
+                    "amount": f"#{transaction[1]:,.2f}",
                     "date": transaction[2].strftime('%B %d, %Y, %I:%M %p'),
-                    "sender": transaction[5] or "N/A",
-                    "receiver": transaction[6] or "N/A"
+                    "sender": transaction[3] or "N/A",
+                    "receiver": transaction[4] or "N/A"
                 })
 
             return {"success": True, "data": formatted_transactions}

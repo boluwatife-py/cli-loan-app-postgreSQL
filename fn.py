@@ -112,13 +112,19 @@ def show_progress(bar_class, duration=3):
             
 def generate_transaction_history_pdf(transaction_data, file_path, user_name):
     try:
+        # Check if transaction data was successfully retrieved
         if not transaction_data["success"]:
-            print(f"Error: {transaction_data['message']}")
+            print(f" Error: {transaction_data['message']}")
             return
 
         transactions = transaction_data["data"]
         if not transactions:
-            print("No transactions to generate a PDF for.")
+            print(" No transactions to generate a PDF for.")
+            return
+
+        
+        if not os.path.exists(file_path):
+            print(f" The directory '{file_path}' does not exist.")
             return
 
         
@@ -127,13 +133,11 @@ def generate_transaction_history_pdf(transaction_data, file_path, user_name):
         pdf.add_page()
         pdf.set_font("Arial", size=12)
 
-        
         pdf.set_font("Arial", style="B", size=14)
-        pdf.cell(200, 10, txt=f"{user_name} Transaction History".lower(), ln=True, align="C")
+        pdf.cell(200, 10, txt=f"{user_name} Transaction History".title(), ln=True, align="C")
         pdf.ln(10)
 
-        
-        pdf.set_font("Arial", style="B", size=12)
+        pdf.set_font("Arial", style="B", size=8)
         pdf.cell(40, 10, txt="Type", border=1, align="C")
         pdf.cell(40, 10, txt="Amount", border=1, align="C")
         pdf.cell(50, 10, txt="Date", border=1, align="C")
@@ -141,20 +145,20 @@ def generate_transaction_history_pdf(transaction_data, file_path, user_name):
         pdf.cell(30, 10, txt="Receiver", border=1, align="C")
         pdf.ln()
 
-        
-        pdf.set_font("Arial", size=10)
+        pdf.set_font("Arial", size=6)
         for transaction in transactions:
             pdf.cell(40, 10, txt=transaction["type"], border=1, align="C")
-            pdf.cell(40, 10, txt=transaction["amount"], border=1, align="C")
+            pdf.cell(40, 10, txt=transaction['amount'], border=1, align="C")
             pdf.cell(50, 10, txt=transaction["date"], border=1, align="C")
             pdf.cell(30, 10, txt=transaction["sender"], border=1, align="C")
             pdf.cell(30, 10, txt=transaction["receiver"], border=1, align="C")
             pdf.ln()
 
         # Save PDF
-        path = os.path.join(file_path, f'{user_name} transaction history.pdf')
+        file_name = f"{user_name}_transaction_history.pdf"
+        path = os.path.join(file_path, file_name)
         pdf.output(path)
-        print(f"Transaction history saved successfully to {file_path}")
+        print(Fore.GREEN + f" Transaction history saved successfully to {path}" + Style.RESET_ALL)
 
     except Exception as e:
-        print(f"An error occurred while generating the PDF: {e}")
+        print(f" An error occurred while generating the PDF: {e}")

@@ -470,7 +470,7 @@ class Dashboard():
         
         
         print("\n   Transfer " + Fore.LIGHTBLACK_EX + f'₦{amount}' + Style.RESET_ALL + ' to \n' + Fore.LIGHTBLACK_EX + f'   {user(id=prob_u['user'])['name'].upper()}' + Style.RESET_ALL )
-        
+        print(prob_u['user'])
         pin = questionary.password("  Enter your pin to complete transaction // (or type \"exit\" to quit)>>>", qmark="").ask()
         
         if pin in breakwords:
@@ -530,7 +530,7 @@ class Dashboard():
         if pent['success']:
             file_path = questionary.path(
                 message="  Select where to save the transaction history PDF:",
-                only_directories=False, 
+                only_directories=True, 
                 qmark=''
             ).ask()
 
