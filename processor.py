@@ -1,5 +1,5 @@
 import getpass
-from fn import is_valid_email, is_valid_phone_number, is_date_of_birth_valid, is_valid_fullname, show_progress, ErrorBar, SuccessBar
+from fn import is_valid_email, is_valid_phone_number, is_date_of_birth_valid, is_valid_fullname, show_progress, ErrorBar, SuccessBar, generate_transaction_history_pdf
 from colorama import Fore, Style, Back, init
 import questionary
 import sys
@@ -203,7 +203,7 @@ class Dashboard():
                 'Repay Loan',
                 'Send Money',
                 'View Balance',
-                'Request Transction History',
+                'Request Transaction History',
                 'Change Pin',
                 'Refresh',
                 'Logout',
@@ -221,7 +221,7 @@ class Dashboard():
         elif action == 'View Balance':
             self._view_balance()
         elif action == 'Request Transaction History':
-            pass
+            self._transaction_history()
         elif action == 'Change Pin':
             pass
         elif action == 'Refresh':
@@ -519,4 +519,41 @@ class Dashboard():
             questionary.press_any_key_to_continue(style=dim_style).ask()    
             self._user_dashboard()
         
-    
+    def _transaction_history(self):
+        self.refresh_data()
+        breakwords = ['exit', 'bye', 'quit', 'end', 'no']
+        pin = questionary.password("  Enter your pin to complete transaction // (or type 'exit' to quit)>>>", qmark="").ask()
+        if pin in breakwords:
+            self._user_dashboard()
+        
+        pent = validate_password(self.user['user_id'], pin)
+        if pent['success']:
+            file_path = questionary.path(
+                message="  Select where to save the transaction history PDF:",
+                only_directories=False, 
+                qmark=''
+            ).ask()
+
+            if not file_path:
+                print(Fore.RED + Style.DIM + "    File save location not selected. Operation cancelled." + Style.RESET_ALL)
+                questionary.press_any_key_to_continue(style=dim_style).ask()
+                self._user_dashboard()
+
+            if file_path.endswith("\\"):
+                file_path.removesuffix("\\")
+            elif file_path.endswith("/"):
+                file_path.removesuffix("/")
+                
+            try:
+                generate_transaction_history_pdf(file_path=file_path, user_name=self.user['name'], transaction_data=Transaction(user_id=self.user['user_id'], financial_id=self.finance['financial_id']).get_transaction_history())
+            except Exception as e:
+                print(e)
+            questionary.press_any_key_to_continue(style=dim_style).ask()
+            self._user_dashboard()
+            
+        else:
+            print(Fore.BLUE + "You entered a wrong pin :(" + Style.RESET_ALL)
+            show_progress(ErrorBar, duration=0.5)
+            questionary.press_any_key_to_continue(style=dim_style).ask()    
+            self._user_dashboard()
+        

@@ -648,51 +648,44 @@ class Transaction():
 
     def get_transaction_history(self):
         try:
-            # Fetch transactions for the user
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT 
-                    transaction_type,
-                    amount,
-                    transaction_date,
-                    COALESCE(receiver, '-') AS receiver,
-                    COALESCE(sender, '-') AS sender
+                    Transactions.transaction_type,
+                    Transactions.amount,
+                    Transactions.transaction_date,
+                    Transactions.user_id AS sender_id,
+                    Transactions.loan_id,
+                    U1.name AS sender_name,
+                    U2.name AS receiver_name
                 FROM Transactions
-                LEFT JOIN transfer_history 
-                ON Transactions.user_id = transfer_history.user_id
+                LEFT JOIN Users AS U1 ON Transactions.user_id = U1.user_id
+                LEFT JOIN Loans ON Transactions.loan_id = Loans.loan_id
+                LEFT JOIN Users AS U2 ON Loans.user_id = U2.user_id
                 WHERE Transactions.user_id = %s
-                ORDER BY transaction_date DESC;
-            """, (self.user_id,))
-            
+                ORDER BY Transactions.transaction_date DESC;
+                """,
+                (self.user_id,)
+            )
             transactions = cur.fetchall()
-            
+
             if not transactions:
-                return {
-                    "success": True,
-                    "message": "No transaction history found.",
-                    "data": []
-                }
+                return {"success": True, "data": []}
 
-            # Format the transaction history
-            formatted_transactions = [
-                {
+            # Format transactions
+            formatted_transactions = []
+            for transaction in transactions:
+                formatted_transactions.append({
                     "type": transaction[0],
-                    "amount": f"₦{Decimal(transaction[1]):,.2f}",
-                    "date": transaction[2].strftime("%B %d, %Y, %I:%M %p"),
-                    "sender": transaction[4] if transaction[4] != "-" else "N/A",
-                    "receiver": transaction[3] if transaction[3] != "-" else "N/A"
-                }
-                for transaction in transactions
-            ]
+                    "amount": f"₦{transaction[1]:,.2f}",
+                    "date": transaction[2].strftime('%B %d, %Y, %I:%M %p'),
+                    "sender": transaction[5] or "N/A",
+                    "receiver": transaction[6] or "N/A"
+                })
 
-            return {
-                "success": True,
-                "message": "Transaction history retrieved successfully.",
-                "data": formatted_transactions
-            }
+            return {"success": True, "data": formatted_transactions}
 
+        except psycopg2.Error as e:
+            return {"success": False, "message": f"Database error: {e}"}
         except Exception as e:
-            return {
-                "success": False,
-                "message": f"Error retrieving transaction history: {e}",
-                "data": []
-            }
+            return {"success": False, "message": f"Error retrieving transaction history: {e}"}
