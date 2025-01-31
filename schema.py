@@ -7,11 +7,11 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-conn = psycopg2.connect(database = "LAir", 
-                        user = "postgres", 
-                        host= 'localhost',
-                        password = "Ilerioluwa1@",
-                        port = 5432)
+conn = psycopg2.connect(database = os.environ.get("DATABASE_NAME"), 
+                        user = os.environ.get("DB_USERNAME"), 
+                        host= os.environ.get("DB_HOST"),
+                        password = os.environ.get("DB_PASSWORD"),
+                        port = os.environ.get("DB_PORT"))
 
 cur = conn.cursor()
 
