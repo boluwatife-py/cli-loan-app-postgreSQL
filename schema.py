@@ -3,7 +3,10 @@ import bcrypt
 from datetime import datetime
 from math import ceil
 from decimal import Decimal
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 conn = psycopg2.connect(database = "LAir", 
                         user = "postgres", 
                         host= 'localhost',
@@ -133,7 +136,46 @@ def is_email_in_db(email):
     try:
         cur.execute("SELECT user_id FROM Users WHERE email = %s", (email,))
         result = cur.fetchone()
+        if result != None:
+            return {'success':True, 'user':result[0], 'message':'Email found'}
+        else:
+            return {'success':False, 'user':None, 'message':'Email not found'}
+
+    except psycopg2.Error as e:
+        print(f"Database error: {e}")
+        return False
+
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return False
+
+def validate_admin_password(admin, password):
+    if not password or not admin:
+        return {'success': False, 'user':None, 'message':'Some fields are empty.'}
+        
+    try:
+        cur.execute(f"SELECT password FROM Admins WHERE admin_id='{admin}'")
+        result = cur.fetchone()[0]
+        
         if result:
+            stored_password_hash = result
+            if bcrypt.checkpw(password.encode('utf-8'), stored_password_hash.encode('utf-8')):
+                return {'success':True, 'user':admin, 'message':'Password veriied successfully'}
+            else:
+                return {'success':False, 'user':None, 'message':'Wrong password.'}
+        else:
+            return {'success': False, 'user':None, 'message':'User not found.'}
+    except psycopg2.Error as e:
+        return {'success': False, 'user':None, 'message':f'Database error.{e}'}
+    except Exception as e:
+        return {'success': False, 'user':None, 'message': f'Unknon Error.{e}'}
+        
+def is_email_in_admin(email):
+    try:
+        cur.execute("SELECT admin_id FROM Admins WHERE email = %s", (email,))
+        result = cur.fetchone()
+        
+        if result != None:
             return {'success':True, 'user':result[0], 'message':'Email found'}
         else:
             return {'success':False, 'user':None, 'message':'Email not found'}
@@ -237,7 +279,6 @@ def validate_password(user_id, password):
     except Exception as e:
         return {'success': False, 'user':None, 'message': f'Unknon Error.{e}'}
     
-    
 def create_user(name, email, phone_number, password, dob):
     insert_query = """
         INSERT INTO Users (name, email, password, dob, phone_number)
@@ -291,6 +332,7 @@ def get_or_create_user_financial(user_id):
         """, (
             user_id, 0.00, 0.00, 500000.00, 0.00, 'active', datetime.now(), datetime.now()
         ))
+        
         financial_account = cur.fetchone()
 
         
@@ -336,6 +378,18 @@ def get_user_unpaid_loans(user_id):
     except Exception as e:
         return f"An unexpected error occurred: {e}"
     
+def update_user_pin(user_id, pin):
+    try:
+        cur.execute("""
+                    UPDATE Users
+                    SET password = %s WHERE user_id = %s;
+                    """, (pin, user_id))
+        cur.execute("COMMIT;")
+        
+        return {"success": True, 'message':'pin updated successfully'}
+    except Exception as e:
+        return {'success': False, 'message':e}
+
 class Transaction():
     def __init__(self, user_id, financial_id):
         self.user_id = user_id
@@ -443,6 +497,7 @@ class Transaction():
 
     def repay_loan(self, loan_id, repayment_amount):
         try:
+            account = get_or_create_user_financial(self.user_id)
             if repayment_amount <= 0:
                 raise ValueError("Repayment amount must be greater than 0.")
             
@@ -528,7 +583,6 @@ class Transaction():
             return {'success': False, 'message': f"Error while processing repayment: {e}"}
 
     def send_money(self, amount, receiver_id):
-        print(receiver_id)
         try:
             if amount <= 0:
                 raise ValueError("Transfer amount must be greater than 0.")
@@ -595,7 +649,9 @@ class Transaction():
                 "success": False,
                 "message": f"Error during money transfer: {e}"
             }
-            
+      
+      
+    # THERE IS AN ERROR IN FETCHING USER BALANCE IN A SCENARIO WHERE THE USER DOES NOT HAVE A FINANCIAL OR THE USER DOES NOT OWE ANY AMOUNT    
     def fetch_user_balance(self):
         try:
             cur.execute(
@@ -630,6 +686,8 @@ class Transaction():
         except Exception as e:
             return {"success": False, "message": f"An unexpected error occurred: {e}"}
 
+    # THERE IS AN ERROR ALSO IN GET TRANSACTION HISTORY, WHERE IT IS FETCHING IT TEICE. ONE FROM THE TRANSACTIONS AND ONE FOR THE TRANSFER HISTORY
+    # POSSIBLE FIXING ERROR, MERGING TRANSFER HISTORY AND TRANSACTIONS TO ONE TABLE
     def get_transaction_history(self):
         try:
             cur.execute(
@@ -648,7 +706,7 @@ class Transaction():
                         CASE 
                             WHEN Transactions.transaction_type = 'Credit' AND Transactions.loan_id IS NOT NULL THEN 'CLI_LP'
                             WHEN Transactions.transaction_type = 'Debit' AND Transactions.loan_id IS NOT NULL THEN U1.name
-                            ELSE U1.name 
+                            ELSE U1.name
                         END AS sender_name,
                         CASE 
                             WHEN Transactions.transaction_type = 'Debit' AND Transactions.loan_id IS NOT NULL THEN 'CLI_LP'
@@ -663,7 +721,7 @@ class Transaction():
 
                     UNION ALL
 
-                    -- Transfer history for money transfers
+                    
                     SELECT 
                         'Transfer' AS transaction_type,
                         transfer_history.amount,
@@ -671,8 +729,8 @@ class Transaction():
                         U1.name AS sender_name,
                         U2.name AS receiver_name
                     FROM transfer_history
-                    LEFT JOIN Users AS U1 ON transfer_history.sender = U1.user_id
-                    LEFT JOIN Users AS U2 ON transfer_history.receiver = U2.user_id
+                    LEFT JOIN Users AS U1 ON transfer_history.sender::varchar = U1.user_id::varchar
+                    LEFT JOIN Users AS U2 ON transfer_history.receiver::varchar = U2.user_id::varchar
                     WHERE transfer_history.user_id = %s
                 ) AS combined_transactions
                 ORDER BY transaction_date DESC;
@@ -701,3 +759,141 @@ class Transaction():
             return {"success": False, "message": f"Database error: {e}"}
         except Exception as e:
             return {"success": False, "message": f"Error retrieving transaction history: {e}"}
+
+
+class Admin():
+    def get_users_paginated(self, page=1, page_size=10):
+        """
+        Fetch users with pagination (default: 10 users per page).
+        
+        Args:
+            page (int): The page number (starting from 1).
+            page_size (int): The number of users per page.
+        
+        Returns:
+            dict: Contains the user list, total user count, and pagination metadata.
+        """
+        try:
+            offset = (page - 1) * page_size
+            
+            # Fetch paginated users
+            cur.execute("""
+                SELECT user_id, name, email, phone_number, created_at
+                FROM Users
+                ORDER BY created_at DESC
+                LIMIT %s OFFSET %s;
+            """, (page_size, offset))
+            users = cur.fetchall()
+
+            # Fetch total user count
+            cur.execute("SELECT COUNT(*) FROM Users;")
+            total_users = cur.fetchone()[0]
+
+            if not users:
+                return {"success": True, "data": [], "total_users": total_users, "message": "No users found."}
+
+            # Format user data
+            formatted_users = [
+                {
+                    "user_id": user[0],
+                    "name": user[1],
+                    "email": user[2],
+                    "phone_number": user[3] or "N/A",
+                    "created_at": user[4].strftime('%B %d, %Y, %I:%M %p')
+                }
+                for user in users
+            ]
+
+            return {
+                "success": True,
+                "data": formatted_users,
+                "total_users": total_users,
+                "current_page": page,
+                "total_pages": (total_users + page_size - 1) // page_size  # Calculate total pages
+            }
+
+        except psycopg2.Error as e:
+            return {"success": False, "message": f"Database error: {e}"}
+        except Exception as e:
+            return {"success": False, "message": f"Error fetching users: {e}"}
+
+    def delete_user(self, user_id):
+        try:
+            cur.execute(f"""DELETE FROM users WHERE user_id = {user_id}""")
+            conn.commit()
+            return {'success': True, 'message': 'User deleted successfully'}
+        except psycopg2.Error as e:
+            return {"success": False, "message": f"Database error: {e}"}
+        except Exception as e:
+            return {"success": False, "message": f"Error fetching users: {e}"}
+        
+    def create_admin(self, user_id):
+        try:
+            cur.execute(f"""SELECT name, email, password FROM users WHERE user_id = {user_id}""")
+            data = cur.fetchone()
+            
+            cur.execute(f"INSERT INTO admins(name, email, password) VALUES(%s, %s, %s)", (data[0], data[1], data[2]))
+            conn.commit()
+            
+            return {'success': True, 'message': 'Admin created successfully'}
+            
+        except psycopg2.Error as e:
+            return {"success": False, "message": f"Database error: {e}"}
+        except Exception as e:
+            return {"success": False, "message": f"Error fetching users: {e}"}
+    
+    def search_users_db(self, search_query, page=1, page_size=10):
+        """
+        Search for users in the database by name, email, or phone number.
+
+        Args:
+            search_query (str): The search keyword (name, email, or phone number).
+            page (int): The page number for pagination.
+            page_size (int): The number of results per page.
+
+        Returns:
+            dict: A dictionary containing search results, total pages, and success status.
+        """
+        try:
+            offset = (page - 1) * page_size  # Calculate offset for pagination
+
+            cur.execute("""
+                SELECT user_id, name, email, phone_number
+                FROM Users
+                WHERE name ILIKE %s OR email ILIKE %s OR phone_number ILIKE %s
+                ORDER BY name ASC
+                LIMIT %s OFFSET %s;
+            """, (f"%{search_query}%", f"%{search_query}%", f"%{search_query}%", page_size, offset))
+
+            users = cur.fetchall()
+
+            # Get total number of users matching search criteria for pagination
+            cur.execute("""
+                SELECT COUNT(*) FROM Users
+                WHERE name ILIKE %s OR email ILIKE %s OR phone_number ILIKE %s;
+            """, (f"%{search_query}%", f"%{search_query}%", f"%{search_query}%"))
+
+            total_users = cur.fetchone()[0]
+            total_pages = -(-total_users // page_size)  # Equivalent to math.ceil()
+
+            return {
+                "success": True,
+                "data": [{"user_id": u[0], "name": u[1], "email": u[2], "phone_number": u[3]} for u in users],
+                "total_pages": total_pages
+            }
+
+        except Exception as e:
+            return {"success": False, "message": f"Database error: {e}"}
+        
+    def show_loan_system(self):
+        try:
+            cur.execute("""
+                SELECT available_funds
+                FROM LoanSystem;
+            """)
+            loans = cur.fetchone()
+            return {
+                "success": True,
+                "data": f"{loans[0]:,.2f}"}
+        except Exception as e:
+            return {"success": False, "message": f"Database error: {e}"}

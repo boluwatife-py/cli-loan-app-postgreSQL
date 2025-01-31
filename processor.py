@@ -1,15 +1,15 @@
-import getpass
 from fn import is_valid_email, is_valid_phone_number, is_date_of_birth_valid, is_valid_fullname, show_progress, ErrorBar, SuccessBar, generate_transaction_history_pdf
 from colorama import Fore, Style, Back, init
 import questionary
 import sys
-from auth import login, signup, is_phone_number_in_db
+from auth import login, signup, is_phone_number_in_db, login_admin
 import os
 import platform
-from schema import get_or_create_user_financial, user, validate_password, Transaction, get_user_unpaid_loans
+from schema import get_or_create_user_financial, user, validate_password, Transaction, get_user_unpaid_loans, update_user_pin, bcrypt, Admin
 from decimal import Decimal
 from questionary import Style as t
 from datetime import datetime, timedelta
+from about import abt
 
 custom_style_fancy = t([
     ('qmark', 'fg:#673ab7 bold'),
@@ -47,7 +47,7 @@ def clear_screen():
         os.system("clear")
 
 
-class Pages:
+class Pages():
     def __init__(self):
         pass
 
@@ -76,7 +76,7 @@ class Pages:
                 elif request == 'Create a new account':
                     self._signup()
                 elif request == 'Admin':
-                    self.admin()
+                    Adm()._admin_dashboard()
                 elif request == 'View About':
                     self.about()
                 elif request == 'Quit':
@@ -89,33 +89,36 @@ class Pages:
             self.main()
 
     def _login(self):
-        while True:
-            identifier = input('    Enter your email or phone number (or type "exit" to quit) >>> ')
-            if identifier.lower() in ['exit', 'quit', 'end', 'break']:
-                self.main()
-            elif is_valid_email(identifier):
-                identifier_type = 'email'
-                break
-            elif is_valid_phone_number(identifier):
-                identifier_type = 'phone-number'
-                break
-            else:
-                print(Fore.RED + Style.BRIGHT + "      Invalid email or phone number :(" + Style.RESET_ALL)
-                print(Fore.BLUE + "      Please re-enter your email or phone number" + Style.RESET_ALL)
-                
-        pin = questionary.password('   Enter your pin >>>', qmark='',).ask()
-        log = login(password=pin, **{identifier_type: identifier})
-        
-        if log['success'] == False:
-            print(Fore.RED + Style.BRIGHT +  log['message'] + Style.RESET_ALL)
-            show_progress(bar_class=ErrorBar, duration=2)
-            self.main()
-        else:
-            print(Fore.GREEN + Style.BRIGHT + log['message'] + Style.RESET_ALL)
-            show_progress(bar_class=SuccessBar)
-            Dashboard(u=log['user'])._user_dashboard()
+        try:
+            while True:
+                identifier = input('    Enter your email or phone number (or type "exit" to quit) >>> ')
+                if identifier.lower() in ['exit', 'quit', 'end', 'break']:
+                    self.main()
+                elif is_valid_email(identifier):
+                    identifier_type = 'email'
+                    break
+                elif is_valid_phone_number(identifier):
+                    identifier_type = 'phone-number'
+                    break
+                else:
+                    print(Fore.RED + Style.BRIGHT + "      Invalid email or phone number :(" + Style.RESET_ALL)
+                    print(Fore.BLUE + "      Please re-enter your email or phone number" + Style.RESET_ALL)
+                    
+            pin = questionary.password('   Enter your pin >>>', qmark='',).ask()
             
-        
+            log = login(password=pin, **{identifier_type: identifier})
+            
+            if log['success'] == False:
+                print(Fore.RED + Style.BRIGHT +  log['message'] + Style.RESET_ALL)
+                show_progress(bar_class=ErrorBar, duration=2)
+                self.main()
+            else:
+                print(Fore.GREEN + Style.BRIGHT + log['message'] + Style.RESET_ALL)
+                show_progress(bar_class=SuccessBar)
+                Dashboard(u=log['user'])._user_dashboard()
+        except Exception as e:
+            print(e)
+            
     def _signup(self):
         while True:
             fullname = input('Enter your full name >>> ')
@@ -154,8 +157,8 @@ class Pages:
                     print(Fore.BLUE + "Please re-enter your date of birth" + Style.RESET_ALL)
 
         while True:
-            password = getpass.getpass('Create 4 digit pin >>> ')
-            confirm_password = getpass.getpass('Re-enter pin >>> ')
+            password = questionary.password('Create 4 digit pin >>> ').ask()
+            confirm_password = questionary.password('Re-enter pin >>> ').ask()
             
             if password != confirm_password:
                 print(Fore.RED + Style.BRIGHT + "Pin don't match" + Style.RESET_ALL)
@@ -165,19 +168,41 @@ class Pages:
                 if __signup['success']:
                     print(Fore.GREEN + Style.BRIGHT + "Signup successful!" + Style.RESET_ALL)
                     show_progress(bar_class=SuccessBar)
+                    self.main()
                     break
                 else:
                     print(Fore.RED + Style.BRIGHT + f"{__signup['message']}" + Style.RESET_ALL)
                     show_progress(bar_class=ErrorBar, duration=2)
                     self.main()
 
-
-
-    def admin(self):
-        pass
+    def _login_admin(self):
+        try:
+            while True:
+                identifier = input('    Enter your email (or type "exit" to quit) >>> ')
+                if identifier.lower() in ['exit', 'quit', 'end', 'break']:
+                    self.main()
+                elif is_valid_email(identifier):
+                    break
+                else:
+                    print(Fore.RED + Style.BRIGHT + "      Invalid email :(" + Style.RESET_ALL)
+                    print(Fore.BLUE + "      Please re-enter your email " + Style.RESET_ALL)
+                    
+            pin = questionary.password('   Enter your pin >>>', qmark='',).ask()
+            log = login_admin(password=pin, email=identifier)
+            
+            if log['success'] == False:
+                print(Fore.RED + Style.BRIGHT +  log['message'] + Style.RESET_ALL)
+                show_progress(bar_class=ErrorBar, duration=2)
+                self.main()
+            else:
+                print(Fore.GREEN + Style.BRIGHT + log['message'] + Style.RESET_ALL)
+                show_progress(bar_class=SuccessBar)
+                Adm()._admin_dashboard()
+        except Exception as e:
+            print(e)
 
     def about(self):
-        print("About page")
+        print(abt())
         
     def quit(self):
         sys.exit(0)
@@ -223,7 +248,7 @@ class Dashboard():
         elif action == 'Request Transaction History':
             self._transaction_history()
         elif action == 'Change Pin':
-            pass
+            self._change_pin()
         elif action == 'Refresh':
             self.refresh_data()
             print('Refreshed :)')
@@ -324,6 +349,7 @@ class Dashboard():
 
         # Ask for pin to complete transaction
         pin = questionary.password("   Enter your pin to complete transaction >>>", qmark="").ask()
+        
         pent = validate_password(user_id=self.user['user_id'], password=pin)
         
         if pent['success']:
@@ -353,7 +379,7 @@ class Dashboard():
     def _repay_loan(self):
         self.refresh_data()
         if not len(self.loans) >= 1:
-            print(Fore.GREEN + Style.DIM + '      You did not have any pending loan.' + Style.RESET_ALL)
+            print(Fore.GREEN + Style.DIM + '     You did not have any pending loan.' + Style.RESET_ALL)
             questionary.press_any_key_to_continue(style=dim_style).ask()
             self._user_dashboard()
             
@@ -400,6 +426,7 @@ class Dashboard():
             return
         
         pin = questionary.password('    Enter your pin to complete transaction >>>', qmark='').ask()
+        
         pent = validate_password(user_id=self.user['user_id'], password=pin)
             
         if pent['success'] == True:
@@ -470,11 +497,12 @@ class Dashboard():
         
         
         print("\n   Transfer " + Fore.LIGHTBLACK_EX + f'₦{amount}' + Style.RESET_ALL + ' to \n' + Fore.LIGHTBLACK_EX + f'   {user(id=prob_u['user'])['name'].upper()}' + Style.RESET_ALL )
-        print(prob_u['user'])
         pin = questionary.password("  Enter your pin to complete transaction // (or type \"exit\" to quit)>>>", qmark="").ask()
         
         if pin in breakwords:
             self._user_dashboard()
+        
+        
         
         pent = validate_password(self.user['user_id'], pin)
         if pent['success']:
@@ -501,6 +529,8 @@ class Dashboard():
         pin = questionary.password("  Enter your pin to complete transaction // (or type \"exit\" to quit)>>>", qmark="").ask()
         if pin in breakwords:
             self._user_dashboard()
+            
+        
         
         pent = validate_password(self.user['user_id'], pin)
         if pent['success']:
@@ -525,6 +555,8 @@ class Dashboard():
         pin = questionary.password("  Enter your pin to complete transaction // (or type 'exit' to quit)>>>", qmark="").ask()
         if pin in breakwords:
             self._user_dashboard()
+        
+        
         
         pent = validate_password(self.user['user_id'], pin)
         if pent['success']:
@@ -557,3 +589,245 @@ class Dashboard():
             questionary.press_any_key_to_continue(style=dim_style).ask()    
             self._user_dashboard()
         
+    def _change_pin(self):
+        pin = questionary.password("  Enter your current pin >>> ", qmark='').ask()
+        
+        pent = validate_password(self.user['user_id'], pin)
+        if pent['success']:
+            newpin = questionary.password("  Enter your new pin >>> ", qmark='').ask()
+            newpin_2 = questionary.password("  Re-enter your new pin >>> ", qmark='').ask()
+            
+            if newpin_2 == newpin and len(newpin) == 4:
+                try:
+                    passw = bcrypt.hashpw(newpin.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                    next = update_user_pin(self.user['user_id'], passw)
+                    
+                    if next['success']:
+                        print(Fore.GREEN + Style.BRIGHT + f'Successfully changed your pin.' + Style.RESET_ALL)
+                        show_progress(SuccessBar, duration=2)
+                        questionary.press_any_key_to_continue(style=dim_style).ask()
+                        self._user_dashboard()
+                    else:
+                        print(Fore.RED + Style.BRIGHT + next['message'] + Style.RESET_ALL)
+                        show_progress(ErrorBar, duration=1)
+                        questionary.press_any_key_to_continue(style=dim_style).ask()
+                        self._user_dashboard()
+                except Exception as e:
+                    print(e)
+
+        else:
+            print(Fore.BLUE + "You entered a wrong pin :(" + Style.RESET_ALL)
+            show_progress(ErrorBar, duration=0.5)
+            questionary.press_any_key_to_continue(style=dim_style).ask()    
+            self._user_dashboard()
+            
+
+class Adm():
+    def _admin_dashboard(self):
+        clear_screen()
+        
+        action = questionary.select(
+            message=f"what will you like to do?",
+            choices=[
+                'Show all users',
+                'Search for a user',
+                'Show loan system account balance',
+                'Refresh',
+                'Logout'
+            ],
+            qmark='',
+            style=custom_style_fancy
+        ).ask()
+        
+        if action == 'Show all users':
+            self._select__users()
+        elif action == 'Search for a user':
+            self.search_user_interactive()
+            pass
+        elif action == 'Show loan system account balance':
+            self.show_balance()
+        elif action == 'Refresh':
+            print('Refreshed :)')
+            show_progress(SuccessBar, duration=1)
+            self._user_dashboard()
+        else:
+            Pages().main()
+            
+
+    def select_user_paginated(self, page_size=10):
+        """
+        Fetch users in a paginated way and allow the admin to select one using questionary.
+
+        Args:
+            page_size (int): Number of users per page.
+
+        Returns:
+            dict: Selected user's details or None if the operation is canceled.
+        """
+        page = 1 
+
+        while True:
+            response = Admin().get_users_paginated(page, page_size)
+
+            if not response["success"]:
+                print(response["message"])
+                return None
+
+            users = response["data"]
+            total_pages = response["total_pages"]
+
+            if not users:
+                print("No users available.")
+                return None
+
+            print(Fore.GREEN + Style.DIM + f'Page: {page}' + Style.RESET_ALL)
+            choices = [
+                questionary.Choice(title=f"   {user['name']} ({user['email']})", value=user["user_id"])
+                for user in users
+            ]
+
+            if page < total_pages:
+                choices.append(questionary.Choice(title="➡️ Next Page", value="next_page"))
+
+            selected_user = questionary.select(
+                "Select a user:",
+                choices=choices,
+                style=custom_style_fancy
+            ).ask()
+
+            if selected_user == "next_page":
+                page += 1
+            elif selected_user:  
+                selected_user_data = next((u for u in users if u["user_id"] == selected_user), None)
+                if selected_user_data:
+                    self._select__users(selected_user_data)
+                return
+            else:
+                print("Operation canceled.")
+                return None
+
+
+    def search_user_interactive(self):
+        """
+        Allows the admin to search for a user by name, email, or phone number and select one.
+        """
+        search_query = questionary.text("Enter name, email, or phone number to search:").ask()
+
+        if not search_query:
+            print("Search query cannot be empty.")
+            return None
+
+        page = 1  
+
+        while True:
+            response = Admin().search_users_db(search_query, page)
+
+            if not response["success"]:
+                print(response["message"])
+                return None
+
+            users = response["data"]
+            total_pages = response["total_pages"]
+
+            if not users:
+                print("No users found.")
+                return None
+
+            choices = [
+                questionary.Choice(title=f"{user['name']} ({user['email']}, {user['phone_number']})", value=user["user_id"])
+                for user in users
+            ]
+
+            if page < total_pages:
+                choices.append(questionary.Choice(title="➡️ Next Page", value="next_page"))
+
+            selected_user = questionary.select(
+                "Select a user:",
+                choices=choices,
+                style=custom_style_fancy
+            ).ask()
+
+            if selected_user == "next_page":
+                page += 1
+            elif selected_user:
+                selected_user_data = next((u for u in users if u["user_id"] == selected_user), None)
+                if selected_user_data:
+                    self._select__users(selected_user_data)
+                return
+            else:
+                print("Operation canceled.")
+                return None
+
+
+    def _select__users(self, user):
+        """
+        Handles user actions after selection.
+        """
+        try:
+            clear_screen()
+            print(f' ID: {user["user_id"]}, Name: {user["name"]}, Email: {user["email"]}, Phone: {user["phone_number"]}')
+            user_action = questionary.select(
+                message="What action will you like to take?",
+                choices=[
+                    '  Delete User.',
+                    '  Make user an admin.',
+                    '  Quit'
+                ],
+                qmark='',
+                style=custom_style_fancy
+            ).ask()
+
+            if user_action == '  Delete User.':
+                cond = Admin().delete_user(user_id=user["user_id"])
+                if cond["success"]:
+                    print(Fore.GREEN + Style.BRIGHT + cond["message"] + Style.RESET_ALL)
+                    show_progress(SuccessBar, duration=2)
+                else:
+                    print(Fore.RED + Style.BRIGHT + cond["message"] + Style.RESET_ALL)
+                    show_progress(ErrorBar, duration=2)
+
+            elif user_action == '  Make user an admin.':
+                try:
+                    coup = Admin().create_admin(user_id=user["user_id"])
+                except Exception as e:
+                    print(Fore.RED + Style.BRIGHT + f"Unexpected error: {e}" + Style.RESET_ALL)
+                    show_progress(ErrorBar, duration=3)
+                    return self._admin_dashboard()
+
+                if coup["success"]:
+                    print(Fore.GREEN + Style.BRIGHT + coup["message"] + Style.RESET_ALL)
+                    show_progress(SuccessBar, duration=2)
+                else:
+                    print(Fore.RED + Style.BRIGHT + coup["message"] + Style.RESET_ALL)
+                    show_progress(ErrorBar, duration=2)
+                    
+            else:
+                print("Operation canceled.")
+                self._admin_dashboard()
+
+            questionary.press_any_key_to_continue(style=dim_style).ask()
+            self._admin_dashboard()
+
+        except Exception as e:
+            print(Fore.RED + Style.BRIGHT + f"Unexpected error: {e}" + Style.RESET_ALL)
+            show_progress(ErrorBar, duration=3)
+            self._admin_dashboard()
+
+    
+    def show_balance(self):
+        try:
+            balance = Admin().show_loan_system()
+            if balance['success']:
+                print(Fore.GREEN + Style.BRIGHT + f"Loan system balance: {balance['data']}." + Style.RESET_ALL)
+                show_progress(SuccessBar, duration=1)
+                questionary.press_any_key_to_continue(style=dim_style).ask()
+                self._admin_dashboard()
+            else:
+                print(Fore.RED + Style.BRIGHT + balance['message'] + Style.RESET_ALL)
+                show_progress(ErrorBar, duration=1)
+                questionary.press_any_key_to_continue(style=dim_style).ask()
+                self._admin_dashboard()
+        except Exception as e:
+            print(Fore.RED + Style.BRIGHT + f"Unexpected error: {e}" + Style.RESET_ALL)
+            show_progress(ErrorBar, duration=3)
+            self._admin_dashboard()

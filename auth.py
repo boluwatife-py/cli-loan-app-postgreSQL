@@ -1,4 +1,4 @@
-from schema import is_email_in_db, is_phone_number_in_db, validate_password, bcrypt, create_user
+from schema import is_email_in_db, is_phone_number_in_db, validate_password, bcrypt, create_user, is_email_in_admin, validate_admin_password
 from fn import is_valid_email, is_date_of_birth_valid, is_valid_phone_number
 
 def authenticate_user(identifier, identifier_type, password):
@@ -67,6 +67,18 @@ def signup(**kwargs):
     
     user = create_user(name=name, email=email, password=password, dob=dob, phone_number=phone_number)
     return user
+        
+        
+def login_admin(email, password):
+    admin = is_email_in_admin(email)
+    if admin['success'] == True:
+        next = validate_admin_password(password=password, admin=admin['user'])
+        if next['success'] == True:
+            return {'success': True, 'user': admin['user'], 'message': 'Login successful'}
+        else:
+            return next
+    else:
+        return {'success': False, 'user': None, 'message': f'error!'}
         
         
 if __name__ == "__main__":

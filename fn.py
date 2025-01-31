@@ -158,7 +158,7 @@ def generate_transaction_history_pdf(transaction_data, file_path, user_name):
         file_name = f"{user_name}_transaction_history.pdf"
         path = os.path.join(file_path, file_name)
         pdf.output(path)
-        print(Fore.GREEN + f" Transaction history saved successfully to {path}" + Style.RESET_ALL)
+        print(Fore.GREEN + Style.BRIGHT + f" Transaction history saved successfully to {path}" + Style.RESET_ALL)
 
     except Exception as e:
-        print(f" An error occurred while generating the PDF: {e}")
+        print(Fore.RED + Style.DIM + f" An error occurred while generating the PDF: {e}" + Style.RESET_ALL)
