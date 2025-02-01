@@ -3,7 +3,7 @@ from fn import is_valid_email, is_date_of_birth_valid, is_valid_phone_number
 
 def authenticate_user(identifier, identifier_type, password):
     if identifier_type == 'email':
-        user = is_email_in_db(identifier)
+        user = is_email_in_db(identifier.lower())
     elif identifier_type == 'phone-number':
         user = is_phone_number_in_db(identifier)
     else:
@@ -21,7 +21,7 @@ def authenticate_user(identifier, identifier_type, password):
 
 def login(password, **kwargs):
     if 'email' in kwargs:
-        return authenticate_user(kwargs['email'], 'email', password)
+        return authenticate_user(kwargs['email'].lower(), 'email', password)
     elif 'phone-number' in kwargs:
         return authenticate_user(kwargs['phone-number'], 'phone-number', password)
     else:
@@ -48,7 +48,7 @@ def signup(**kwargs):
     
     
     # SECOND VERIFICATION FOR THE EMAIL
-    if not is_valid_email(email):
+    if not is_valid_email(email.lower()):
         return {'success': False, 'message': f'{email} is not a valid email address'}
     
     #SECOND VERIFICATION FOR THE PHONE NUMBER
@@ -65,7 +65,7 @@ def signup(**kwargs):
 
     password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     
-    user = create_user(name=name, email=email, password=password, dob=dob, phone_number=phone_number)
+    user = create_user(name=name, email=email.lower(), password=password, dob=dob, phone_number=phone_number)
     return user
         
         

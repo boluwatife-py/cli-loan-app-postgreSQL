@@ -6,12 +6,12 @@ from decimal import Decimal
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
-conn = psycopg2.connect(database = os.environ.get("DATABASE_NAME"), 
-                        user = os.environ.get("DB_USERNAME"), 
-                        host= os.environ.get("DB_HOST"),
-                        password = os.environ.get("DB_PASSWORD"),
-                        port = os.environ.get("DB_PORT"))
+
+conn = psycopg2.connect(database = "LAir", 
+                        user = "postgres", 
+                        host= 'localhost',
+                        password = "Ilerioluwa1@",
+                        port = 5432)
 
 cur = conn.cursor()
 
@@ -191,20 +191,40 @@ def is_email_in_admin(email):
 
 def is_phone_number_in_db(phone_number):
     try:
-        cur.execute("SELECT user_id FROM Users WHERE phone_number = %s", (phone_number,))
+        # Normalize the phone number to handle both formats
+        if phone_number.startswith("0") and len(phone_number) == 11:
+            alt_format = "+234" + phone_number[1:]  # Convert to +234 format
+        elif phone_number.startswith("+234") and len(phone_number) == 14:
+            alt_format = "0" + phone_number[4:]  # Convert to 0 format
+        else:
+            alt_format = None  # No alternative format
+
+        # Query the database for both formats
+        if alt_format:
+            cur.execute(
+                "SELECT user_id FROM Users WHERE phone_number IN (%s, %s)",
+                (phone_number, alt_format)
+            )
+        else:
+            cur.execute(
+                "SELECT user_id FROM Users WHERE phone_number = %s",
+                (phone_number,)
+            )
+
         result = cur.fetchone()
         if result:
-            return {'success':True, 'user':result[0], 'message':'Phone-number found'}
+            return {'success': True, 'user': result[0], 'message': 'Phone number found'}
         else:
-            return {'success':False, 'user':None, 'message':'Phone-number not found'}
+            return {'success': False, 'user': None, 'message': 'Phone number not found'}
 
     except psycopg2.Error as e:
         print(f"Database error: {e}")
-        return False
+        return {'success': False, 'message': 'Database error occurred'}
 
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-        return False
+        return {'success': False, 'message': 'Unexpected error occurred'}
+
 
 
 def query_user(**kwargs):
