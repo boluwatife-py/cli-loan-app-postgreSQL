@@ -375,6 +375,7 @@ def get_or_create_user_financial(user_id):
         conn.rollback()
         raise e
 
+
 def get_user_unpaid_loans(user_id):
     try:
         cur.execute(
@@ -670,7 +671,6 @@ class Transaction():
                 "message": f"Error during money transfer: {e}"
             }
       
-      
     def fetch_user_balance(self):
         try:
             cur.execute(
@@ -705,8 +705,6 @@ class Transaction():
         except Exception as e:
             return {"success": False, "message": f"An unexpected error occurred: {e}"}
 
-    # THERE IS AN ERROR ALSO IN GET TRANSACTION HISTORY, WHERE IT IS FETCHING IT TWICE. ONE FROM THE TRANSACTIONS AND ONE FOR THE TRANSFER HISTORY
-    # POSSIBLE FIXING ERROR, MERGING TRANSFER HISTORY AND TRANSACTIONS TO ONE TABLE
     def get_transaction_history(self):
         try:
             cur.execute(
@@ -718,36 +716,28 @@ class Transaction():
                     sender_name,
                     receiver_name
                 FROM (
-                    -- Normal Transactions
+                    -- Loan Transactions (Only Credit & Debit)
                     SELECT 
                         t.transaction_type,
                         t.amount,
                         t.transaction_date,
-                        COALESCE(
-                            CASE 
-                                WHEN t.transaction_type = 'Credit' AND t.loan_id IS NOT NULL THEN 'CLI_LP'
-                                WHEN t.transaction_type = 'Debit' AND t.loan_id IS NOT NULL THEN u1.name
-                                ELSE u1.name
-                            END, 'N/A'
-                        ) AS sender_name,
-                        COALESCE(
-                            CASE 
-                                WHEN t.transaction_type = 'Debit' AND t.loan_id IS NOT NULL THEN 'CLI_LP'
-                                WHEN t.transaction_type = 'Credit' AND t.loan_id IS NOT NULL THEN u2.name
-                                ELSE u2.name
-                            END, 'N/A'
-                        ) AS receiver_name
+                        COALESCE(u1.name, 'N/A') AS sender_name,
+                        COALESCE(u2.name, 'N/A') AS receiver_name
                     FROM Transactions t
                     LEFT JOIN Users u1 ON t.user_id = u1.user_id
                     LEFT JOIN Loans l ON t.loan_id = l.loan_id
                     LEFT JOIN Users u2 ON l.user_id = u2.user_id
                     WHERE t.user_id = %s
+                    AND t.loan_id IS NOT NULL  -- Only fetch loans (borrowed or repaid)
 
                     UNION ALL
 
-                    -- Transfer History
+                    -- Transfer Transactions (Only from transfer_history)
                     SELECT 
-                        'Transfer' AS transaction_type,
+                        CASE 
+                            WHEN th.sender::VARCHAR = %s::VARCHAR THEN 'Debit'
+                            WHEN th.receiver::VARCHAR = %s::VARCHAR THEN 'Credit'
+                        END AS transaction_type,
                         th.amount,
                         th.date_created AS transaction_date,
                         COALESCE(u1.name, 'N/A') AS sender_name,
@@ -755,12 +745,13 @@ class Transaction():
                     FROM transfer_history th
                     LEFT JOIN Users u1 ON th.sender::VARCHAR = u1.user_id::VARCHAR
                     LEFT JOIN Users u2 ON th.receiver::VARCHAR = u2.user_id::VARCHAR
-                    WHERE th.sender = %s OR th.receiver = %s
+                    WHERE (th.sender::VARCHAR = %s::VARCHAR OR th.receiver::VARCHAR = %s::VARCHAR)
                 ) AS combined_transactions
                 ORDER BY transaction_date DESC;
                 """,
-                (self.user_id, self.user_id, self.user_id)
+                (self.user_id, str(self.user_id), str(self.user_id), str(self.user_id), str(self.user_id))
             )
+            
             transactions = cur.fetchall()
 
             if not transactions:
@@ -783,7 +774,6 @@ class Transaction():
             return {"success": False, "message": f"Database error: {e}"}
         except Exception as e:
             return {"success": False, "message": f"Error retrieving transaction history: {e}"}
-
 
 class Admin():
     def get_users_paginated(self, page=1, page_size=10):

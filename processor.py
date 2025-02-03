@@ -532,7 +532,7 @@ class Dashboard():
         
         pent = validate_password(self.user['user_id'], pin)
         if pent['success']:
-            response = Transaction(user_id=self.user_id, financial_id=self.finance).send_money(amount=5000, receiver_id=prob_u['user'])
+            response = Transaction(user_id=self.user_id, financial_id=self.finance).send_money(amount=amount, receiver_id=prob_u['user'])
             if response["success"]:
                 print(Fore.GREEN + Style.BRIGHT + f'Successfully transferred ₦{amount:,.2f} to user with ID {user(id=prob_u['user'])['name'].upper()}' + Style.RESET_ALL)
                 show_progress(SuccessBar, duration=2)
