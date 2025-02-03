@@ -671,18 +671,17 @@ class Transaction():
             }
       
       
-    # THERE IS AN ERROR IN FETCHING USER BALANCE IN A SCENARIO WHERE THE USER DOES NOT HAVE A FINANCIAL OR THE USER DOES NOT OWE ANY AMOUNT    
     def fetch_user_balance(self):
         try:
             cur.execute(
                 """
                 SELECT 
                     uf.balance, 
-                    COALESCE(SUM(r.amount_due - r.amount_paid), 0) AS total_outstanding_with_interest
+                    COALESCE(SUM(COALESCE(r.amount_due, 0) - COALESCE(r.amount_paid, 0)), 0) AS total_outstanding_with_interest
                 FROM UserFinancials uf
                 LEFT JOIN Loans l ON uf.user_id = l.user_id
-                LEFT JOIN Repayments r ON l.loan_id = r.loan_id
-                WHERE uf.user_id = %s AND r.status = 'Pending'
+                LEFT JOIN Repayments r ON l.loan_id = r.loan_id AND r.status = 'Pending'
+                WHERE uf.user_id = %s
                 GROUP BY uf.balance;
                 """,
                 (self.user_id,)
@@ -719,43 +718,48 @@ class Transaction():
                     sender_name,
                     receiver_name
                 FROM (
+                    -- Normal Transactions
                     SELECT 
-                        Transactions.transaction_type,
-                        Transactions.amount,
-                        Transactions.transaction_date,
-                        CASE 
-                            WHEN Transactions.transaction_type = 'Credit' AND Transactions.loan_id IS NOT NULL THEN 'CLI_LP'
-                            WHEN Transactions.transaction_type = 'Debit' AND Transactions.loan_id IS NOT NULL THEN U1.name
-                            ELSE U1.name
-                        END AS sender_name,
-                        CASE 
-                            WHEN Transactions.transaction_type = 'Debit' AND Transactions.loan_id IS NOT NULL THEN 'CLI_LP'
-                            WHEN Transactions.transaction_type = 'Credit' AND Transactions.loan_id IS NOT NULL THEN U2.name
-                            ELSE U2.name
-                        END AS receiver_name
-                    FROM Transactions
-                    LEFT JOIN Users AS U1 ON Transactions.user_id = U1.user_id
-                    LEFT JOIN Loans ON Transactions.loan_id = Loans.loan_id
-                    LEFT JOIN Users AS U2 ON Loans.user_id = U2.user_id
-                    WHERE Transactions.user_id = %s
+                        t.transaction_type,
+                        t.amount,
+                        t.transaction_date,
+                        COALESCE(
+                            CASE 
+                                WHEN t.transaction_type = 'Credit' AND t.loan_id IS NOT NULL THEN 'CLI_LP'
+                                WHEN t.transaction_type = 'Debit' AND t.loan_id IS NOT NULL THEN u1.name
+                                ELSE u1.name
+                            END, 'N/A'
+                        ) AS sender_name,
+                        COALESCE(
+                            CASE 
+                                WHEN t.transaction_type = 'Debit' AND t.loan_id IS NOT NULL THEN 'CLI_LP'
+                                WHEN t.transaction_type = 'Credit' AND t.loan_id IS NOT NULL THEN u2.name
+                                ELSE u2.name
+                            END, 'N/A'
+                        ) AS receiver_name
+                    FROM Transactions t
+                    LEFT JOIN Users u1 ON t.user_id = u1.user_id
+                    LEFT JOIN Loans l ON t.loan_id = l.loan_id
+                    LEFT JOIN Users u2 ON l.user_id = u2.user_id
+                    WHERE t.user_id = %s
 
                     UNION ALL
 
-                    
+                    -- Transfer History
                     SELECT 
                         'Transfer' AS transaction_type,
-                        transfer_history.amount,
-                        transfer_history.date_created AS transaction_date,
-                        U1.name AS sender_name,
-                        U2.name AS receiver_name
-                    FROM transfer_history
-                    LEFT JOIN Users AS U1 ON transfer_history.sender::varchar = U1.user_id::varchar
-                    LEFT JOIN Users AS U2 ON transfer_history.receiver::varchar = U2.user_id::varchar
-                    WHERE transfer_history.user_id = %s
+                        th.amount,
+                        th.date_created AS transaction_date,
+                        COALESCE(u1.name, 'N/A') AS sender_name,
+                        COALESCE(u2.name, 'N/A') AS receiver_name
+                    FROM transfer_history th
+                    LEFT JOIN Users u1 ON th.sender::VARCHAR = u1.user_id::VARCHAR
+                    LEFT JOIN Users u2 ON th.receiver::VARCHAR = u2.user_id::VARCHAR
+                    WHERE th.sender = %s OR th.receiver = %s
                 ) AS combined_transactions
                 ORDER BY transaction_date DESC;
                 """,
-                (self.user_id, self.user_id)
+                (self.user_id, self.user_id, self.user_id)
             )
             transactions = cur.fetchall()
 
