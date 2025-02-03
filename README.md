@@ -46,7 +46,7 @@ The **Loan System App** is a robust financial management platform designed to fa
    ```
 5. **Run the Application**
    ```sh
-   python main.py
+   python app.py
    ```
 
 ---

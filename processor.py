@@ -106,6 +106,12 @@ class Pages():
                     
             pin = questionary.password('   Enter your pin >>>', qmark='',).ask()
             
+            
+            if not pin.isdigit():
+                print(Fore.RED + Style.BRIGHT + "      Invalid pin format :(" + Style.RESET_ALL)
+                questionary.press_any_key_to_continue(message="     Press any key to continue", style=dim_style).ask()
+                self.main()
+                
             log = login(password=pin, **{identifier_type: identifier})
             
             if log['success'] == False:
@@ -160,8 +166,13 @@ class Pages():
             password = questionary.password('Create 4 digit pin >>> ').ask()
             confirm_password = questionary.password('Re-enter pin >>> ').ask()
             
+            if not password.isdigit():
+                print(Fore.RED + Style.BRIGHT + "      Invalid pin format :(" + Style.RESET_ALL)
+                print(Fore.BLUE + "      Please re-enter your pin" + Style.RESET_ALL)
+            
             if password != confirm_password:
                 print(Fore.RED + Style.BRIGHT + "Pin don't match" + Style.RESET_ALL)
+                
             else:
                 __signup = signup(name=fullname, email=email, phone_number=phone_number, dob=dob, password=password)
                 
@@ -188,6 +199,10 @@ class Pages():
                     print(Fore.BLUE + "      Please re-enter your email " + Style.RESET_ALL)
                     
             pin = questionary.password('   Enter your pin >>>', qmark='',).ask()
+            if not pin.isdigit():
+                print(Fore.RED + Style.BRIGHT + "      Invalid pin format :(" + Style.RESET_ALL)
+                questionary.press_any_key_to_continue(message="     Press any key to continue", style=dim_style).ask()
+                self.main()
             log = login_admin(password=pin, email=identifier)
             
             if log['success'] == False:
@@ -348,7 +363,12 @@ class Dashboard():
                 print(Fore.RED + Style.DIM + "    Invalid date format. Please enter the date in YYYY-MM-DD format." + Style.RESET_ALL)
 
         # Ask for pin to complete transaction
+        
         pin = questionary.password("   Enter your pin to complete transaction >>>", qmark="").ask()
+        if not pin.isdigit():
+            print(Fore.RED + Style.BRIGHT + "    Invalid pin format :(" + Style.RESET_ALL)
+            questionary.press_any_key_to_continue(message="   Press any key to continue", style=dim_style).ask()
+            self._user_dashboard()
         
         pent = validate_password(user_id=self.user['user_id'], password=pin)
         
@@ -426,7 +446,10 @@ class Dashboard():
             return
         
         pin = questionary.password('    Enter your pin to complete transaction >>>', qmark='').ask()
-        
+        if not pin.isdigit():
+            print(Fore.RED + Style.BRIGHT + "    Invalid pin format :(" + Style.RESET_ALL)
+            questionary.press_any_key_to_continue(message="   Press any key to continue", style=dim_style).ask()
+            self._user_dashboard()
         pent = validate_password(user_id=self.user['user_id'], password=pin)
             
         if pent['success'] == True:
@@ -498,7 +521,10 @@ class Dashboard():
         
         print("\n   Transfer " + Fore.LIGHTBLACK_EX + f'₦{amount}' + Style.RESET_ALL + ' to \n' + Fore.LIGHTBLACK_EX + f'   {user(id=prob_u['user'])['name'].upper()}' + Style.RESET_ALL )
         pin = questionary.password("  Enter your pin to complete transaction // (or type \"exit\" to quit)>>>", qmark="").ask()
-        
+        if not pin.isdigit():
+            print(Fore.RED + Style.BRIGHT + "    Invalid pin format :(" + Style.RESET_ALL)
+            questionary.press_any_key_to_continue(message="   Press any key to continue", style=dim_style).ask()
+            self._user_dashboard()
         if pin in breakwords:
             self._user_dashboard()
         
@@ -530,6 +556,10 @@ class Dashboard():
         if pin in breakwords:
             self._user_dashboard()
             
+        if not pin.isdigit():
+            print(Fore.RED + Style.BRIGHT + "    Invalid pin format :(" + Style.RESET_ALL)
+            questionary.press_any_key_to_continue(message="   Press any key to continue", style=dim_style).ask()
+            self._user_dashboard()
         
         
         pent = validate_password(self.user['user_id'], pin)
@@ -556,7 +586,10 @@ class Dashboard():
         if pin in breakwords:
             self._user_dashboard()
         
-        
+        if not pin.isdigit():
+            print(Fore.RED + Style.BRIGHT + "    Invalid pin format :(" + Style.RESET_ALL)
+            questionary.press_any_key_to_continue(message="   Press any key to continue", style=dim_style).ask()
+            self._user_dashboard()
         
         pent = validate_password(self.user['user_id'], pin)
         if pent['success']:
@@ -591,12 +624,19 @@ class Dashboard():
         
     def _change_pin(self):
         pin = questionary.password("  Enter your current pin >>> ", qmark='').ask()
-        
+        if not pin.isdigit():
+            print(Fore.RED + Style.BRIGHT + "    Invalid pin format :(" + Style.RESET_ALL)
+            questionary.press_any_key_to_continue(message="    Press any key to continue", style=dim_style).ask()
+            self._user_dashboard()
         pent = validate_password(self.user['user_id'], pin)
         if pent['success']:
             newpin = questionary.password("  Enter your new pin >>> ", qmark='').ask()
             newpin_2 = questionary.password("  Re-enter your new pin >>> ", qmark='').ask()
-            
+            if not newpin.isdigit():
+                print(Fore.RED + Style.BRIGHT + "    Invalid pin format :(" + Style.RESET_ALL)
+                questionary.press_any_key_to_continue(message="    Press any key to continue", style=dim_style).ask()
+                self._user_dashboard()
+                
             if newpin_2 == newpin and len(newpin) == 4:
                 try:
                     passw = bcrypt.hashpw(newpin.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
