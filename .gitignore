@@ -1,2 +1,5 @@
-env
+# Ignore the environment folder
+env/
+
+# Ignore .env file
 .env
